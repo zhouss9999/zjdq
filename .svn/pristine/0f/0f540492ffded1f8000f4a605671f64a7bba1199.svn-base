@@ -1,0 +1,18 @@
+package wy.qingdao_atmosphere.reportform.service;
+
+import java.util.List;
+import java.util.Map;
+
+public interface ReportformService {
+	//查询大气站点的设备
+	public List<Map<String, Object>> getwz(Map<String, Object> map);
+	//查询实时报数据和日报
+	public List<Map<String, Object>> queryrealData(Map<String, Object> map);
+	//月报计算
+	public List<Map<String, Object>> queryMonthlyReport(List<Map<String, Object>> list) throws Exception;
+	//年报计算
+	public List<Map<String, Object>> queryYearReport(List<Map<String, Object>> list) throws Exception;
+	
+	//查询探空曲线站点
+	public List<Map<String, Object>> querytkqxobj();
+}

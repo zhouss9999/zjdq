@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.countrysitedata.mapping.SiteDatamapper">
+
+	<!-- 获取设备类型关联参数 -->
+	<select id="getParamByDtid" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.Param">
+		select param.* from cp_info_param param inner join cp_connect_devicetypeparam conn 
+			on param.paramid = conn.paramid
+			and param.isused = 1 and conn.isused = 1 
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and conn.devicetypeid in (${devicetypeid})
+			</if>
+		order by param.paramid
+	</select>
+	
+	<!-- 同步监测数据到数据库-新增 -->
+	<insert id="addCollectData" parameterType="java.util.List">
+		insert into cp_collect_actual(dataid,dataguid,datavalue,collecttime)
+		values
+		<foreach collection="list" item="item" index="index" separator=",">
+			(nextval('cp_collect_actual_id_seq'),#{item.dataguid},#{item.datavalue},#{item.collecttime}::timestamp)
+		</foreach>
+	</insert>
+	
+	<!-- 获取设备类型下参数辅助对象 -->
+	<select id="getParamAssisByDtid" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis">
+		select obp.objid,obp.paramid,par.paramname,obp.dataguid,obp.devicenumber,dev.devicename,dev.rmk1 
+			from cp_connect_objparam obp,cp_info_param par,cp_info_device dev
+			where obp.paramid = par.paramid and obp.devicenumber = dev.devicenumber 
+			and obp.isused = 1 and par.isused = 1 and dev.isused = 1
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and dev.devicetypeid in (${devicetypeid})
+			</if>
+		order by obp.objid,obp.paramid
+	</select>
+	
+	<!-- 删除指定时间之前的监测数据 -->
+	<delete id="delCollData" parameterType="map">
+		delete from cp_collect_actual 
+		where to_char(collecttime,'yyyy-MM-dd HH24:MI:ss') &lt; #{collecttime}
+		and dataguid in (
+			select obp.dataguid 
+			from cp_connect_objparam obp,cp_info_param par,cp_info_device dev
+			where obp.paramid = par.paramid and obp.devicenumber = dev.devicenumber 
+			and obp.isused = 1 and par.isused = 1 and dev.isused = 1
+			and dev.devicetypeid in (${devicetypeid})
+			order by obp.objid,obp.paramid
+		)
+	</delete>
+	
+	<!-- 通过objtypeid获取objid -->
+	<select id="getObjidByOtid" parameterType="int" resultType="String">
+		select * from cp_info_obj where objtypeid = ${_parameter} and isused = 1
+	</select>
+	
+	<!-- 获取子表附件的最大时间 -->
+	<select id="getsubStoreMaxtime" parameterType="map" resultType="String">
+		select to_char(COALESCE(max(fieldvalue),'1970-01-01 00:00:00')::timestamp,#{timeformat}) from cp_attach_subinfostore where objid in (${objid})
+		and fieldid in (${fieldid})
+	</select>
+</mapper>

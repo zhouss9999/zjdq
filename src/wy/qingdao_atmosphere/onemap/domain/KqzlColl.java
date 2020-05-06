@@ -1,0 +1,231 @@
+package wy.qingdao_atmosphere.onemap.domain;
+
+import javax.persistence.Entity;
+
+/**
+ * 空气质量监测javaBean
+ * @author zzb
+ *
+ */
+
+@Entity
+public class KqzlColl {
+	
+	private int objid;					//对象objid
+	private String sitenumber = "-";	//站点编号
+	private String sitetype = "-";		//站点类型
+	private String sitename = "-";		//站点名称
+	private String monitortype = "-";	//监测类型
+	private String province = "-";		//所属省份
+	private String city = "-";			//所属市
+	private String county = "-";		//所属县市区
+	private String address = "-";		//详细地址
+	private String lon = "-";			//地理位置-经度
+	private String lat = "-";			//地理位置-纬度
+	private String device = "-";		//关联设备
+	private String issite = "-";		//站点控制级别(国站/微站)
+
+	private String collecttime = "-";	//数据时间
+	private String aqi = "-";			//AQI
+	private String pm25 = "-";			//PM2.5
+	private String pm10 = "-";			//PM10
+	private String co = "-";			//CO
+	private String no2 = "-";			//NO2
+	private String so2 = "-";			//SO2
+	private String o3 = "-";			//O3
+	private String o38 = "-";			//O38
+	private String voc = "-";			//VOC
+	private String pollutant = "-";		//首要污染物
+	private String quality = "-";		//空气质量等级
+	
+	private String wd = "-";			//温度
+	private String sd = "-";			//湿度
+	private String fl = "-";			//风力
+	private String qy = "-";			//气压
+	private String jsl = "-";			//降水量
+	
+	
+	public int getObjid() {
+		return objid;
+	}
+	public void setObjid(int objid) {
+		this.objid = objid;
+	}
+	public String getSitenumber() {
+		return sitenumber;
+	}
+	public void setSitenumber(String sitenumber) {
+		this.sitenumber = sitenumber;
+	}
+	public String getSitetype() {
+		return sitetype;
+	}
+	public void setSitetype(String sitetype) {
+		this.sitetype = sitetype;
+	}
+	public String getSitename() {
+		return sitename;
+	}
+	public void setSitename(String sitename) {
+		this.sitename = sitename;
+	}
+	public String getMonitortype() {
+		return monitortype;
+	}
+	public void setMonitortype(String monitortype) {
+		this.monitortype = monitortype;
+	}
+	public String getProvince() {
+		return province;
+	}
+	public void setProvince(String province) {
+		this.province = province;
+	}
+	public String getCity() {
+		return city;
+	}
+	public void setCity(String city) {
+		this.city = city;
+	}
+	public String getCounty() {
+		return county;
+	}
+	public void setCounty(String county) {
+		this.county = county;
+	}
+	public String getAddress() {
+		return address;
+	}
+	public void setAddress(String address) {
+		this.address = address;
+	}
+	public String getLon() {
+		return lon;
+	}
+	public void setLon(String lon) {
+		this.lon = lon;
+	}
+	public String getLat() {
+		return lat;
+	}
+	public void setLat(String lat) {
+		this.lat = lat;
+	}
+	public String getDevice() {
+		return device;
+	}
+	public void setDevice(String device) {
+		this.device = device;
+	}
+	public String getIssite() {
+		return issite;
+	}
+	public void setIssite(String issite) {
+		this.issite = issite;
+	}
+	public String getCollecttime() {
+		return collecttime;
+	}
+	public void setCollecttime(String collecttime) {
+		this.collecttime = collecttime;
+	}
+	public String getAqi() {
+		return aqi;
+	}
+	public void setAqi(String aqi) {
+		this.aqi = aqi;
+	}
+	public String getPm25() {
+		return pm25;
+	}
+	public void setPm25(String pm25) {
+		this.pm25 = pm25;
+	}
+	public String getPm10() {
+		return pm10;
+	}
+	public void setPm10(String pm10) {
+		this.pm10 = pm10;
+	}
+	public String getCo() {
+		return co;
+	}
+	public void setCo(String co) {
+		this.co = co;
+	}
+	public String getNo2() {
+		return no2;
+	}
+	public void setNo2(String no2) {
+		this.no2 = no2;
+	}
+	public String getSo2() {
+		return so2;
+	}
+	public void setSo2(String so2) {
+		this.so2 = so2;
+	}
+	public String getO3() {
+		return o3;
+	}
+	public void setO3(String o3) {
+		this.o3 = o3;
+	}
+	public String getO38() {
+		return o38;
+	}
+	public void setO38(String o38) {
+		this.o38 = o38;
+	}
+	public String getVoc() {
+		return voc;
+	}
+	public void setVoc(String voc) {
+		this.voc = voc;
+	}
+	public String getPollutant() {
+		return pollutant;
+	}
+	public void setPollutant(String pollutant) {
+		this.pollutant = pollutant;
+	}
+	public String getQuality() {
+		return quality;
+	}
+	public void setQuality(String quality) {
+		this.quality = quality;
+	}
+	public String getWd() {
+		return wd;
+	}
+	public void setWd(String wd) {
+		this.wd = wd;
+	}
+	public String getSd() {
+		return sd;
+	}
+	public void setSd(String sd) {
+		this.sd = sd;
+	}
+	public String getFl() {
+		return fl;
+	}
+	public void setFl(String fl) {
+		this.fl = fl;
+	}
+	
+	public String getQy() {
+		return qy;
+	}
+	public void setQy(String qy) {
+		this.qy = qy;
+	}
+	public String getJsl() {
+		return jsl;
+	}
+	public void setJsl(String jsl) {
+		this.jsl = jsl;
+	}
+	
+	
+}

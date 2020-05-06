@@ -1,0 +1,58 @@
+package wy.qingdao_atmosphere.weatheranalyze.service;
+
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.net.ftp.FTPClient;
+
+/**
+ * @author xsq
+ * @description 气象分析Service层接口
+ * 
+ */
+public interface WeatherAnalyzeService {
+	/**
+	 * @description 根据气场类型和时间获取网格预测图片
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return List<String>
+	 */
+	public List<String> getWeatherImgUrl(FTPClient ftpClient, String weathertype, String forecastDate);
+	
+	/**
+	 * @description 根据气场类型和时间获取实时数据
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherActualData(FTPClient ftpClient, String weathertype, String forecastDate);
+	
+	/**
+	 * @description 根据气场类型和时间获取日数据
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherDayData(FTPClient ftpClient, String weathertype, String forecastDate);
+	
+	/**
+	 * @description 根据气场类型和时间获取网格图片xy坐标信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherImgXYInfo(FTPClient ftpClient, String weathertype, String forecastDate);
+	
+	/**
+	 * @description 根据气场类型和时间获取WRF信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFWeatherData(String weathertype, String forecastDate);
+}

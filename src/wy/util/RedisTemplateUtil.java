@@ -1,0 +1,197 @@
+package wy.util;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import net.sf.json.JSONArray;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.ListOperations;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.stereotype.Component;
+import com.alibaba.fastjson.JSON;
+
+@SuppressWarnings("all")
+/*catchType=1 String类型缓存数据，2 List类型缓存数据，3 Hash类型缓存数据
+ * expireTime 缓存有效期，单位 分钟
+ * dataMap    需要保存至缓存的数据 
+ * key        缓存中的key
+ * */
+@Component
+public class RedisTemplateUtil {
+	@Autowired
+	private RedisTemplate<String, Object> redisTemplate;
+
+	// 保存缓存数据
+	// catchType=1 String类型缓存数据，2 List类型缓存数据，3 Hash类型缓存数据
+	// expireTime 缓存有效期，单位 分钟
+	// dataMap 需要保存至缓存的数据
+	// key String，list类型中key[0]是缓存key，Hash类型中key[key.length-1]为缓存key
+	public void setCatch(int catchType, long expireTime, Map dataMap,
+			String... key) {
+		switch (catchType) {
+		case 1:
+			setCatchByString(expireTime, dataMap, key[0]);
+			break;
+		case 2:
+			setCatchByList(expireTime, dataMap, key[0]);
+			break;
+		case 3:
+			setCatchByHash(expireTime, dataMap, key);
+			break;
+		default:
+			setCatchByString(expireTime, dataMap, key[0]);
+			break;
+		}
+	};
+
+	// 获取缓存数据
+	// catchType=1 String类型缓存数据，2 List类型缓存数据
+	public Object getCatch(int catchType, String... key) {
+		switch (catchType) {
+		case 1:
+			return getCatchForString(key[0]);
+		case 2:
+			return getCatchForList(key[0]);
+		case 3:
+			return getCatchForHash(key[0]);
+		default:
+			return getCatchForString(key[0]);
+		}
+	};
+
+	// 判断缓存数据是否为空
+	// catchType=1 String类型缓存数据，2 List类型缓存数据
+	public boolean existsValue(int catchType, String... key) {
+		switch (catchType) {
+		case 1:
+			return existsValueForString(key[0]);
+		case 2:
+			return existsValueForList(key[0]);
+		case 3:
+			return existsValueForHash(key[0]);
+		default:
+			return existsValueForString(key[0]);
+		}
+	}
+
+	// 设置缓存过期时间
+	public void expireTime(String key, long expireTime) {
+		long expireTimeDefault = expireTime == 0 ? 24 * 60 : expireTime;
+		redisTemplate.expire(key, expireTimeDefault, TimeUnit.MINUTES);
+	}
+
+	// -------------保存数据缓存（list,String）
+	// list -- list转为json格式字符串保存
+	public void setCatchByList(long expireTime, Map dataMap, String key) {
+		ListOperations<String, Object> list = redisTemplate.opsForList();
+		list.rightPush(key, JSON.toJSONString(dataMap.get(key)));
+		long expireTimeDefault = expireTime == 0 ? 1440 : expireTime;
+		redisTemplate.expire(key, expireTimeDefault, TimeUnit.MINUTES);
+	};
+
+	// list -- 直接保存list
+	public void setCatchByListTwo(long expireTime, Map dataMap, String key) {
+		ListOperations<String, Object> list = redisTemplate.opsForList();
+		list.rightPushAll(key, dataMap.get(key));
+		long expireTimeDefault = expireTime == 0 ? 1440 : expireTime;
+		redisTemplate.expire(key, expireTimeDefault, TimeUnit.MINUTES);
+	};
+
+	// String
+	public void setCatchByString(long expireTime, Map dataMap, String key) {
+		ValueOperations<String, Object> value = redisTemplate.opsForValue();
+		JSONArray jsonArr = JSONArray.fromObject(dataMap.get(key));
+		value.set(key, jsonArr);
+		long expireTimeDefault = expireTime == 0 ? 1440 : expireTime;
+		redisTemplate.expire(key, expireTimeDefault, TimeUnit.MINUTES);
+	};
+
+	// Hash
+	public void setCatchByHash(long expireTime, Map dataMap, String... keys) {
+		HashOperations<String, Object, Object> value = redisTemplate
+				.opsForHash();
+		String catchKey = keys[keys.length - 1];
+		Map valueMap = new HashMap();
+		for (int i = 0; i <= keys.length - 1; i++) {
+			valueMap.put(keys[i], dataMap.get(keys[i]));
+		}
+		value.putAll(catchKey, valueMap);
+		long expireTimeDefault = expireTime == 0 ? 1440 : expireTime;
+		redisTemplate.expire(catchKey, expireTimeDefault, TimeUnit.MINUTES);
+	};
+
+	// --------获取缓存数据（list,String）
+	// list
+	public String getCatchForList(String key) {
+		ListOperations<String, Object> list = redisTemplate.opsForList();
+		int size = list.range(key, 0, -1).toString().length();
+		String listStr = list.range(key, 0, -1).toString()
+				.substring(1, size - 1);
+		return listStr;
+	};
+
+	// list -- 获取list类型的缓存数据
+	public List getCatchForListTwo(String key) {
+		ListOperations<String, Object> list = redisTemplate.opsForList();
+		List valueList = list.range(key, 0, -1);
+		return valueList;
+	};
+
+	// String
+	public JSONArray getCatchForString(String key) {
+		ValueOperations<String, Object> value = redisTemplate.opsForValue();
+		JSONArray jArray = JSONArray.fromObject("[" + value.get(key) + "]");
+		return jArray;
+	};
+
+	// Hash
+	public Map getCatchForHash(String key) {
+		HashOperations<String, Object, Object> hash = redisTemplate
+				.opsForHash();
+		Map valueMap = hash.entries(key);
+		return valueMap;
+	};
+
+	// --------判断缓存数据是否为空（list,String）
+	// List
+	public boolean existsValueForList(String key) {
+		ListOperations<String, Object> list = redisTemplate.opsForList();
+		boolean hasValue = list.size(key) <= 0 ? false : true;
+		return hasValue;
+	}
+
+	// String
+	public boolean existsValueForString(String key) {
+		ValueOperations<String, Object> value = redisTemplate.opsForValue();
+		boolean hasValue = (value.get(key) == null || value.get(key).equals("")) ? false
+				: true;
+		return hasValue;
+	}
+
+	// Hash
+	public boolean existsValueForHash(String key) {
+		HashOperations<String, Object, Object> value = redisTemplate
+				.opsForHash();
+		boolean hasValue = value.entries(key).isEmpty() ? false : true;
+		return hasValue;
+	}
+	
+	
+	
+	// String(将数据存入redis)
+	public void setCatchByStringTwo(long expireTime, String str, String key) {
+		redisTemplate.opsForValue().set(key, str);
+		long expireTimeDefault = expireTime == 0 ? 1440 : expireTime;
+		redisTemplate.expire(key, expireTimeDefault, TimeUnit.MINUTES);
+	};
+	
+	// String(从redis中取数据)
+	public String getCatchForStringTwo(String key) {
+		ValueOperations<String, Object> value = redisTemplate.opsForValue();
+		String str = value.get(key).toString();
+		return str;
+	};
+}

@@ -1,0 +1,27 @@
+package wy.qingdao_atmosphere.mobile.service;
+
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+
+public interface AirAppService {
+
+	//大气现状-获取城市监测参数
+	public List<AirCollect> getAirSbyCity(HttpServletRequest request);
+	
+	//大气现状-获取城市下的站点
+	public List<Map<String, Object>> getSiteSbyCity(HttpServletRequest request);
+	
+	//大气现状-获取站点监测参数
+	public List<AirCollect> getAirSbyObjid(HttpServletRequest request);
+	
+	//大气地图-获取站点监测参数(浓度)
+	public List<AirCollect> getAirMdensity(HttpServletRequest request);
+	
+	//大气地图-获取站点监测参数(优良率)
+	public List<Map<String, Object>> getAirMgoodrate(HttpServletRequest request);
+
+}

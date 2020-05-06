@@ -1,0 +1,393 @@
+package wy.qingdao_atmosphere.onemap.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.geotools.data.DataUtilities;
+import org.geotools.data.collection.ListFeatureCollection;
+import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.feature.SchemaException;
+import org.geotools.feature.simple.SimpleFeatureBuilder;
+import org.geotools.geojson.feature.FeatureJSON;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
+
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.io.WKTReader;
+
+import java.io.StringWriter;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.io.IOException;
+
+import javax.servlet.http.HttpServletRequest;
+
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.onemap.dao.OneMapDao;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+import wy.util.DatapointsApiThreadUtil;
+import wy.util.datapersistence.SpaceInfo;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+
+@Service("oneMapService")
+public class OneMapServiceImpl implements OneMapService {
+
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private OneMapDao oneMapDao;
+
+
+	public List<OmMenu> getOmMenuList() {
+		//原始数据
+		List<OmMenu> rootlist = oneMapDao.getOmMenuList();
+		//创建list，存放最后的结果
+		List<OmMenu> menuList = new ArrayList<OmMenu>();
+		
+		if (rootlist.size() > 0) {
+			//先找到所有的一级目录
+			for (OmMenu menu : rootlist) {
+				//一级目录的父级目录id为'0'
+				if ("0".equals(menu.getParentid())) {
+					menuList.add(menu);
+				}
+			}
+			
+			//为一级目录设置子目录,getChild是递归调用的
+			for (OmMenu menu : menuList) {
+				menu.setChildList(getChild(String.valueOf(menu.getId()),rootlist));
+			}
+		}
+		
+		return menuList;
+	}
+
+	
+	/**
+	 * 递归查找子菜单
+	 * @param id 当前目录id
+	 * @param rootMenu 要查找的列表
+	 * @return childList
+	 */
+	private List<OmMenu> getChild(String id, List<OmMenu> rootMenu) {
+	    //子目录
+	    List<OmMenu> childList = new ArrayList<OmMenu>();
+	    for (OmMenu menu : rootMenu) {
+	        // 遍历所有节点，将父目录id与传过来的id比较
+	        if (!("0".equals(menu.getParentid()))) {
+	            if (menu.getParentid().equals(id)) {
+	                childList.add(menu);
+	            }
+	        }
+	    }
+	    // 把子目录的子目录再循环一遍
+	    for (OmMenu menu : childList) {
+            // 递归
+            menu.setChildList(getChild(String.valueOf(menu.getId()), rootMenu));
+	    } 
+	    // 递归退出条件
+	    if (childList.size() == 0) {
+	        return new ArrayList<OmMenu>();
+	    }
+	    return childList;
+	}
+	
+	
+	public StringWriter getOmSiteGeom(HttpServletRequest request, String mark) {
+		
+		//给出默认值:默认给国站的
+		int objtypeid = 5; //objtypeid
+		String space_tablename = "space_countrysite"; //空间表名
+		String cityfieldid = "5010006"; //城市fieldid
+		
+		if ("wz".equals(mark)) {
+			objtypeid = 1;
+			space_tablename = "space_site";
+			cityfieldid = "1010006";
+		} 
+		
+		//传参Map
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		paramMap.put("objtypeid", objtypeid);
+		paramMap.put("cityfieldid", cityfieldid);
+		
+		/**========================================请求参数=========================================================*/
+		//行政区域(多个用逗号隔开)
+		String citys = request.getParameter("city") == null ? "" : request.getParameter("city");
+		String city = "";
+		if (!"".equals(citys)) {
+			for (int i = 0; i < citys.split(",").length; i++) {
+				if (i != citys.split(",").length - 1) {
+					city += "'"+ citys.split(",")[i] + "',";
+				} else {
+					city += "'"+ citys.split(",")[i] + "'";
+				}
+			}		
+		}
+		
+		//站点objid(多个用逗号隔开)
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		/**======================================================================================================*/
+		
+		paramMap.put("city", city);
+		paramMap.put("objid", objid);
+		
+		//站点信息列表
+		List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(paramMap, "getOmObjInfoList");
+		
+		//站点空间位置信息列表(list转map，优化程序)
+		List<SpaceInfo> siteGeomList = baseService.getGeomList(space_tablename,"");
+		Map<Integer, String> siteGeomMap = new LinkedHashMap<Integer, String>();
+		if (siteGeomList.size() > 0) {
+			for (SpaceInfo spaceInfo : siteGeomList) {
+				siteGeomMap.put(spaceInfo.getObjid(), spaceInfo.getShape());
+			}
+		}
+		
+		StringWriter writer = new StringWriter();
+		
+		try {
+			SimpleFeatureType TYPE = DataUtilities.createType("Link",
+			          "geometry:Point,objid:Integer,sitenumber:String,"
+					+ "sitetype:String,sitename:String,monitortype:String," 
+			        + "province:String,city:String,county:String,address:String,"
+					+ "lon:String,lat:String,device:String"
+			);
+			
+			writer = getSiteGeoJson(TYPE, siteList, siteGeomMap);
+			
+		} catch (SchemaException e) {
+			e.printStackTrace();
+		}
+		
+		
+		return writer;
+	}
+
+	
+	/**
+	 * 站点列表及坐标信息转换为geoJson格式
+	 * 
+	 * @param TYPE:定义坐标系及字段
+	 * @param siteList:站点信息列表
+	 * @param siteGeomMap:站点坐标列表
+	 * 
+	 * @return writer
+	 */
+	private StringWriter getSiteGeoJson(SimpleFeatureType TYPE, List<Map<String,Object>> siteList, Map<Integer, String> siteGeomMap) {
+		
+		StringWriter writer = new StringWriter();
+		try {
+			SimpleFeatureBuilder featureBuilder = new SimpleFeatureBuilder(TYPE);
+			GeometryFactory geometryFactory = new GeometryFactory();
+			WKTReader reader = new WKTReader(geometryFactory);
+			FeatureJSON fjson = new FeatureJSON();
+			List<SimpleFeature> features = new ArrayList<SimpleFeature>();
+			SimpleFeatureCollection collection = new ListFeatureCollection(TYPE, features);
+			
+			if (siteList.size() > 0) {
+				for (int i = 0; i < siteList.size(); i++) {
+					Map<String, Object> siteMap = siteList.get(i);
+					
+					int geoMapKey = Integer.parseInt(siteMap.get("objid").toString());
+					if (siteGeomMap.containsKey(geoMapKey)) {
+						
+						Point point = (Point)reader.read(siteGeomMap.get(geoMapKey));
+						featureBuilder.add(point);//坐标
+						
+						for(Map.Entry<String, Object> entry : siteMap.entrySet()){
+							if ("objid".equals(entry.getKey())) {
+								featureBuilder.add(geoMapKey);//objid
+							} else {
+								featureBuilder.add(entry.getValue().toString());
+							}
+				        }
+						
+						SimpleFeature feature = featureBuilder.buildFeature(null);
+						
+						features.add(feature);
+						
+					}
+				} 
+			}
+			
+			fjson.writeFeatureCollection(collection, writer);
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (com.vividsolutions.jts.io.ParseException e) {
+			e.printStackTrace();
+		}
+		
+		return writer;
+	}
+	
+	
+	public Map<String, Object> omFsData(HttpServletRequest request,String datastreamIds) {
+		
+		//必传
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "0" : request.getParameter("objid");
+		
+		//String[] colMinMaxTime = colMinMaxTime("5",72,objid);
+		String[] colMinMaxTime = new String[2];
+		if (request.getAttribute("actual") != null) {
+			colMinMaxTime = colMinMaxTime("5",1,objid);
+		} else {
+			colMinMaxTime = colMinMaxTime("5",72,objid);
+		}
+		
+		//按时间查询
+		String begintime = (request.getParameter("begintime") == null || "".equals(request.getParameter("begintime"))) ? colMinMaxTime[0] : request.getParameter("begintime");
+		String endtime = (request.getParameter("endtime") == null || "".equals(request.getParameter("endtime"))) ? colMinMaxTime[1] : request.getParameter("endtime");
+		
+		Map<String, Object> resultMap = getDataMap("5", objid, datastreamIds, begintime, endtime, null);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n小时)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param hour 小时
+	 * @return {mintime,maxtime}
+	 */
+	private String[] colMinMaxTime(String devicetypeid, int hour, String objid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtid("yyyy-MM-dd HH24:MI:ss", devicetypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		Date date = new Date();
+		if (maxtime != null && !"".equals(maxtime)) {
+			try {
+				date = sdf.parse(maxtime);
+			} catch (ParseException e) {
+				e.printStackTrace();
+			}
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.HOUR_OF_DAY, calendar.get(Calendar.HOUR_OF_DAY)-hour);//(maxtime-n小时)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime,maxtime};
+		
+		return times;
+	}
+	
+	
+	/**
+	 * 数据点查询(单个站点)
+	 * @param devicetypeid:设备类型id,String
+	 * @param objid:对象id,String
+	 * @param datastreamids:查询的数据流，多个数据流之间用逗号分隔（可选）,String
+	 * @param startTime:提取数据点的开始时间（可选）,String
+	 * @param endTime:提取数据点的结束时间（可选）,String
+	 * @param cursor:指定本次请求继续从cursor位置开始提取数据（可选）,String
+	 * 
+	 * @return dataMap
+	 */
+	private Map<String, Object> getDataMap(String devicetypeid, String objid, String datastreamIds, String startTime, String endTime,String cursor){
+		
+		//传参map
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("devicetypeid", devicetypeid);
+		paramMap.put("objid", objid);
+		ParamAssis dk = oneMapDao.getDevidKey(paramMap);
+		
+		//用于存放数据返回
+		Map<String, Object> dataMap = new LinkedHashMap<String, Object>();
+		
+		dataMap = DatapointsApiThreadUtil.getDatapointsApi(datastreamIds, dk.getDevicenumber(), dk.getRmk1(), 
+				startTime, endTime, cursor, "DESC", dataMap);
+		
+		return dataMap;
+	}
+
+
+	public List<KqzlColl> getOmGzSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap) {
+		
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		paramMap.put("objid", objid);
+		
+		if (paramMap.containsKey("history")) {
+			//时间格式：yyyy-MM-dd
+			String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+			String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+			
+			if ("".equals(begintime) && "".equals(endtime)) {
+				paramMap.put("recently", "'24 hour'");
+				paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+				paramMap.put("sitenameid", "5010003");
+				paramMap.put("sitenumberid", "5010001");
+				paramMap.put("objtypeid", 5);
+			} else {
+				if (!"".equals(begintime) && !"".equals(endtime)) {
+					if ((begintime).equals(endtime)) {//同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+						paramMap.put("sitenameid", "5010003");
+						paramMap.put("sitenumberid", "5010001");
+						paramMap.put("objtypeid", 5);
+					} else {//不同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd");
+						paramMap.put("sitenameid", "6010001");
+						paramMap.put("sitenumberid", "6010002");
+						paramMap.put("objtypeid", 6);
+					}
+				} else {
+					if (!"".equals(begintime)) {
+						begintime = begintime +" 00:00:00";
+					}
+					if (!"".equals(endtime)) {
+						endtime = endtime +" 23:59:59";
+					}
+					
+					paramMap.put("begintime", begintime);
+					paramMap.put("endtime", endtime);
+					paramMap.put("dateformat", "yyyy-mm-dd");
+					paramMap.put("sitenameid", "6010001");
+					paramMap.put("sitenumberid", "6010002");
+					paramMap.put("objtypeid", 6);
+				}
+			}
+			
+		}
+		
+		List<KqzlColl> kqzlList = oneMapDao.getOmGzSiteForKqzl(paramMap);
+		if (kqzlList.size() == 0) {
+			kqzlList = new ArrayList<KqzlColl>();
+		} 
+		
+		return kqzlList;
+	}
+
+	
+
+
+}

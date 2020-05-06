@@ -1,0 +1,14 @@
+package wy.qingdao_atmosphere.countanalysis.dao;
+
+import java.util.List;
+
+import wy.qingdao_atmosphere.countanalysis.domain.AreaSiteCount;
+
+public interface CountDao {
+	
+	/*获取区域名称列表*/
+	public List<String> getAreaName(String city);
+	/*获取区域微站站点数*/
+	public List<AreaSiteCount> getAreaSiteCount(String city);
+
+}

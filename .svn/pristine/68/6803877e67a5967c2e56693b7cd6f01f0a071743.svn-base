@@ -1,0 +1,131 @@
+package wy.qingdao_atmosphere.reportform.timer;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import com.sun.org.apache.bcel.internal.generic.NEW;
+
+import wy.qingdao_atmosphere.datacenter.service.DataCenterService;
+import wy.qingdao_atmosphere.reportform.service.ReportformService;
+import wy.util.AirBean;
+import wy.util.Calc;
+import wy.util.GetDatapointsApiUtil;
+import wy.util.datapersistence.Dao.BaseaddDao;
+
+/**
+ * 定时获取微站大气监测小时数据
+ * @author KEYI
+ *
+ */
+@Component
+public class ReportformTimer {
+	@Resource
+	private BaseaddDao baseaddDao;
+	
+	@Resource
+	private ReportformService reportformService;
+	
+	@Resource
+	private DataCenterService dataCenterService;
+	
+	//定时任务取数据，每小时一次
+//	@Scheduled(cron = "0 0 * * * ?")
+	public void getSynchroDataHours(){
+		try {
+			getSynchroData("1", 0);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			baseaddDao.addUserOperateLog("异常操作","微站保存小时数据", "", e.getMessage(), "false", null, null);
+		}
+	}
+	
+//	@Scheduled(cron = "0/20 * * * * ?")
+	public void getSynchroData24Hours(){
+		try {
+			getSynchroData("2", 1);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			baseaddDao.addUserOperateLog("异常操作","微站保存小时数据", "", e.getMessage(), "false", null, null);
+		}
+	}
+	
+	/**
+	 * 
+	 * @param objtypeid     1是站点(监测实时数据) 2是站点监测日数据
+	 * @param type			0是小时   1是日数据
+	 * @throws Exception
+	 */
+	public void  getSynchroData(String objtypeid,int type) throws Exception{
+		//查询需要同步数据的站点
+		List<Map<String, Object>> list = reportformService.getwz(objtypeid);
+		for(int i=0;i<list.size();i++){
+			Map<String, Object> quymap = list.get(i);
+			String key = quymap.get("rmk1").toString();
+			String devid = quymap.get("devicenumber").toString();
+			//需要查询的数据
+//			String datastreamIds = "so2,no2,pm10,pm25,co,o3,o38,AQI";
+			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:00:00");
+			AirBean airBean = new AirBean();
+			airBean.setObjid(Integer.parseInt(quymap.get("objid").toString()));//对象id
+			airBean.setType(type);//0是小时   1是日数据
+			airBean.setCollecttime("2018-8-10 00:00:00");
+			airBean = dataCenterService.getAirBean(airBean,devid,key);//获取平均值
+			if(airBean!=null){
+				airBean = Calc.AirQ(airBean);//计算AQI,污染物,空气质量等级
+				Map<String, Object> map = new HashMap<String, Object>();
+	        	map.put("devicenumber", devid);
+	        	map.put("paramname", "AQI");
+	        	map.put("datavalue", airBean.getAqi());
+	    		map.put("collecttime", airBean.getCollecttime());
+	    		map.put("objid", airBean.getObjid());
+	    		dataCenterService.addwzData(map);
+	    		map.put("paramname", "so2");
+	        	map.put("datavalue", airBean.getSo2());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "no2");
+	        	map.put("datavalue", airBean.getNo2());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "pm10");
+	        	map.put("datavalue", airBean.getPm10());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "pm25");
+	        	map.put("datavalue", airBean.getPm25());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "co");
+	        	map.put("datavalue", airBean.getCo());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "o3");
+	        	map.put("datavalue", airBean.getO3());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "o38");
+	        	map.put("datavalue", airBean.getO38());
+	        	dataCenterService.addwzData(map);
+	        	if(type==1){
+	        		map.put("paramname", "pm10_24h");
+		        	map.put("datavalue", airBean.getPm10_24h());
+		        	dataCenterService.addwzData(map);
+		        	map.put("paramname", "pm25_24h");
+		        	map.put("datavalue", airBean.getPm25_24h());
+		        	dataCenterService.addwzData(map);
+	        	}
+	        	map.put("paramname", "quality");
+	        	map.put("datavalue", airBean.getAqilevel());
+	        	dataCenterService.addwzData(map);
+	        	map.put("paramname", "primary_pollutant");
+	        	map.put("datavalue", airBean.getPp());
+	        	dataCenterService.addwzData(map);
+			}
+		}
+	}
+	
+}

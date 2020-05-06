@@ -1,0 +1,506 @@
+package wy.util.datapersistence.Dao;
+
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingDeque;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpSession;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.support.SqlSessionDaoSupport;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Repository;
+
+import wy.util.GetDeviceInfo;
+import wy.util.GetIPAddress;
+import wy.util.datapersistence.AttachInfoStore;
+import wy.util.datapersistence.AttachSubinfoStore;
+import wy.util.datapersistence.InfoObj;
+import wy.util.datapersistence.ModelAssist;
+import wy.util.datapersistence.SpaceInfo;
+@SuppressWarnings("all")
+
+@Repository
+public class BaseaddDao extends SqlSessionDaoSupport {
+
+	@Resource
+	public void setSuperSessionFactory(SqlSessionFactory sessionFactory) {
+		this.setSqlSessionFactory(sessionFactory);
+	}
+	
+	@Autowired
+	private HttpSession session;
+	
+	@Autowired
+	private HttpServletRequest request;
+	
+	/** cp_attach_infostore表添加数据(基本数据表)对象objid
+	 * !name.equals("attachuploadman") || !name.equals("attachfilePath") || !name.equals("attachfieldId")
+	 * 这些条件是为了在表单数据有附件信息的情况过滤
+	 * */
+	public int addDataToCpAttachInfoStore(HttpServletRequest request, int objid) {
+		int successNum = 0;
+		List<AttachInfoStore> paramList = new ArrayList<AttachInfoStore>();
+		Enumeration e = request.getParameterNames();
+		while (e.hasMoreElements()) {
+			String name = (String) e.nextElement();// UI key
+			String value = request.getParameter(name);// UI value
+			AttachInfoStore attachInfoStore = new AttachInfoStore();
+			attachInfoStore.setObjid(objid);
+			if(!name.equals("objid") && !name.equals("attachuploadman") && !name.equals("attachfilePath") && !name.equals("attachfieldId")){
+				attachInfoStore.setFieldid(Long.valueOf(name));
+				attachInfoStore.setFieldvalue(value);
+			}
+			paramList.add(attachInfoStore);
+		}
+		successNum = this.getSqlSession().insert("addDataToCpAttachInfoStore",
+				paramList);
+		return successNum;
+	}
+	
+	/**cp_attach_infostore表添加数据-有空间数据(基本数据表)
+	 * 对象objid
+	 * !name.equals("attachuploadman") || !name.equals("attachfilePath") || !name.equals("attachfieldId")
+	 * tablename 空间表名
+	 * */
+	public int addDataToCpAttachInfoStore(HttpServletRequest request, int objid,String tablename) {
+		int successNum = 0;
+		List<AttachInfoStore> paramList = new ArrayList<AttachInfoStore>();
+		String shape = "";
+		Enumeration e = request.getParameterNames();
+		while (e.hasMoreElements()) {
+			String name = (String) e.nextElement();// UI key
+			String value = request.getParameter(name);// UI value
+			if(!name.equals("objid") && !name.equals("shape") && !name.equals("attachuploadman") && !name.equals("attachfilePath") && !name.equals("attachfieldId")
+					&& !name.equals("attachwdname") && !name.equals("attachwdtype")	){
+				AttachInfoStore attachInfoStore = new AttachInfoStore();
+				attachInfoStore.setObjid(objid);
+				attachInfoStore.setFieldid(Long.valueOf(name));
+				attachInfoStore.setFieldvalue(value);
+				paramList.add(attachInfoStore);
+			}
+			if(name.equals("shape")){
+				shape=value;
+			}
+		}
+		successNum = this.getSqlSession().insert("addDataToCpAttachInfoStore",
+				paramList);
+		addSpaceInfo(shape, tablename, objid);
+		return successNum;
+	}
+	
+	/** 
+	 * cp_info_obj表添加数据(对象表)
+	 * objtypeid  : 对象类型id
+	 * objnameKey : 对象名称的fieldid
+	 * */
+	public int[] addDataToCpInfoObj(HttpServletRequest request,
+			int objtypeid,String objnameKey) {
+		int result[] = new int[2];
+		String objname = request.getParameter(objnameKey);
+		int successNum = 0;
+		InfoObj infoObj = new InfoObj();
+		infoObj.setObjname(objname);
+		infoObj.setObjtypeid(objtypeid);
+		successNum = this.getSqlSession().insert("addDataToCpInfoObj",infoObj);
+		result[0] = successNum;
+		result[1] = infoObj.getObjid();
+		return result;
+	}
+	
+	/**cp_attach_Subinfostore表添加数据(子表)
+    objid 对象objid*/
+	public int addDataToCpAttachSubinfoStore(HttpServletRequest request) {
+		String objidStr = request.getParameter("objid");
+		int objid = objidStr.equals("")?0:Integer.valueOf(objidStr);
+		int successNum = 0;
+		String valueid = selectMaxValueid(objid);//子表中valueid
+		List<AttachSubinfoStore> paramList = new ArrayList<AttachSubinfoStore>();
+		
+		Enumeration e = request.getParameterNames();
+		while (e.hasMoreElements()) {
+			String name = (String) e.nextElement();// UI key
+			String value = request.getParameter(name);// UI value
+
+			if(!name.equals("objid")){
+				AttachSubinfoStore attachSubinfoStore = new AttachSubinfoStore();
+				attachSubinfoStore.setObjid(objid);
+				attachSubinfoStore.setFieldid(Long.valueOf(name));
+				attachSubinfoStore.setFieldvalue(value);
+				attachSubinfoStore.setValueid(valueid);
+				paramList.add(attachSubinfoStore);
+			}
+		}
+		successNum = this.getSqlSession().insert("addDataToCpAttachSubinfoStore",
+				paramList);
+		return successNum;
+	}
+		
+	/**cp_attach_Subinfostore表添加数据(子表)
+    objid 对象objid*/
+	public void addSpaceInfo(String shape,String tablename,int objid) {
+		SpaceInfo spaceInfo = new SpaceInfo();
+		spaceInfo.setObjid(objid);
+		spaceInfo.setId(objid);
+		spaceInfo.setShape(shape);
+		spaceInfo.setTablename(tablename);
+		this.getSqlSession().insert("addSpaceInfo",spaceInfo);	
+	}
+	
+	/**查询子表中最大valueid*/
+	public String selectMaxValueid(int objid){
+		String maxValueid = "1";
+		List<Integer> resultList = this.getSqlSession().selectList("selectMaxValueid", objid);
+		if(resultList.size()>0){
+			if(resultList.get(0)!=null){
+				maxValueid=String.valueOf((Integer.valueOf(resultList.get(0))+1));
+			}
+		}
+		return maxValueid;
+	}
+		
+	/**cp_attach_infostore表更新(基本数据表)*/
+	public int updDataToCpAttachInfoStore(HttpServletRequest request) {
+		int successNum = 0;
+		List<AttachInfoStore> paramList = new ArrayList<AttachInfoStore>();
+		String objidStr = request.getParameter("objid");
+		int objid = objidStr.equals("")?0:Integer.valueOf(objidStr);
+		Enumeration e = request.getParameterNames();
+		while (e.hasMoreElements()) {
+			String name = (String) e.nextElement();// UI key
+			String value = request.getParameter(name);// UI value
+			AttachInfoStore attachInfoStore = new AttachInfoStore();
+			if(!name.equals("objid") && !name.equals("shape") && !name.equals("attachuploadman") && !name.equals("attachfilePath") && !name.equals("attachfieldId")){
+				attachInfoStore.setFieldid(Long.valueOf(name));
+				attachInfoStore.setFieldvalue(value);
+				attachInfoStore.setObjid(objid);
+			}
+			paramList.add(attachInfoStore);
+		}
+		
+		successNum = this.getSqlSession().update("updDataToCpAttachInfoStore",
+				paramList);
+		
+		//此处做如果对象字段信息缺失用来补充数据的操作
+		List<AttachInfoStore> datalist = selectAttachinfostoreByobjid(objid);
+		if(datalist.size() > 0 && paramList.size()>0){
+			for(int i = 0; i < datalist.size(); i++){
+				for(int j = 0; j < paramList.size(); j++){
+					if(datalist.get(i).getFieldid() == paramList.get(j).getFieldid()){
+						paramList.remove(paramList.get(j));
+					}
+				}
+			}
+			if(paramList.size() > 0){
+				this.getSqlSession().insert("addDataToCpAttachInfoStore",paramList);
+			}
+		}
+		return successNum;
+	}
+		
+	/**cp_info_obj表更新(对象表)
+	objid  : 对象objid  
+	objnameKey : 对象名称的fieldid*/
+	public int updDataToCpInfoObj(HttpServletRequest request,String objnameKey) {
+		String objidStr = request.getParameter("objid");
+		int objid = objidStr.equals("")?0:Integer.valueOf(objidStr);
+		String objname = request.getParameter(objnameKey);
+		int successNum = 0;
+		InfoObj infoObj = new InfoObj();
+		infoObj.setObjname(objname);
+		infoObj.setObjid(objid);
+		successNum = this.getSqlSession().update("updDataToCpInfoObj",infoObj);
+		return successNum;
+	}
+		
+	/**cp_attach_subinfostore表更新(子表)
+	objid 对象objid*/
+	public int updDataToCpAttachSubnfoStore(HttpServletRequest request) {
+		String objidStr = request.getParameter("objid");
+		int objid = objidStr.equals("")?0:Integer.valueOf(objidStr);
+		int successNum = 0;
+		String valueid = request.getParameter("valueid");
+		List<AttachSubinfoStore> paramList = new ArrayList<AttachSubinfoStore>();
+		
+		Enumeration e = request.getParameterNames();
+		while (e.hasMoreElements()) {
+			String name = (String) e.nextElement();// UI key
+			String value = request.getParameter(name);// UI value
+		
+			if(!name.equals("objid") && !name.equals("valueid")){
+				AttachSubinfoStore attachSubinfoStore = new AttachSubinfoStore();
+				attachSubinfoStore.setObjid(objid);
+				attachSubinfoStore.setFieldid(Long.valueOf(name));
+				attachSubinfoStore.setFieldvalue(value);
+				attachSubinfoStore.setValueid(valueid);
+				paramList.add(attachSubinfoStore);
+			}
+		}
+		successNum = this.getSqlSession().update("updDataToCpAttachSubinfoStore",
+				paramList);
+		return successNum;
+	}		
+		
+	/**数据添加（cp_info_obj,然后cp_attach_infostore）
+	objtypeid  : 对象类型id  
+	objnameKey : 对象名称的fieldid*/
+	public int baseAdd(HttpServletRequest request, int objtypeid,String objnameKey) {
+		int[] result = addDataToCpInfoObj(request,objtypeid,objnameKey);
+		addDataToCpAttachInfoStore(request,result[1]);
+		return result[1];
+	}
+	
+	/**数据添加 有空间数据（cp_info_obj,然后cp_attach_infostore）
+	objtypeid  : 对象类型id  
+	objnameKey : 对象名称的fieldid
+	spacename 空间表名*/
+	public int baseAdd(HttpServletRequest request, int objtypeid,String objnameKey,String spacename) {
+		int[] result = addDataToCpInfoObj(request,objtypeid,objnameKey);
+		addDataToCpAttachInfoStore(request,result[1],spacename);
+		return result[1];
+	}
+	
+	/**数据更新（cp_info_obj,然后cp_attach_infostore）
+	objid  : 对象objid  
+	objnameKey : 对象名称的fieldid*/
+	public int baseUpd(HttpServletRequest request, String objnameKey) {
+		int result = updDataToCpInfoObj(request,objnameKey);
+		updDataToCpAttachInfoStore(request);
+		return result;
+	}
+	
+	/**基本数据列表*/
+	public List<ModelAssist> selectForCpAttachInfoStore(Map<String,Object> paramMap,String sql) {
+		sql=sql.equals("")?"selectForCpAttachInfoStore":sql;
+		List<ModelAssist> listModelAssist = this.getSqlSession().selectList(sql, paramMap);
+		return listModelAssist;
+	}
+	
+	/**子表数据列表*/
+	public List<AttachSubinfoStore> selectForCpAttachSubinfoStore(int objid,String sql) {
+		sql=sql.equals("")?"selectForCpAttachSubinfoStore":sql;
+		List<AttachSubinfoStore> listModelAssist = this.getSqlSession().selectList(sql, objid);
+		return listModelAssist;
+	}
+	
+	/**基本数据详情*/
+	public List<ModelAssist> selectForCpAttachInfoStoreDetail(int objid) {
+		List<ModelAssist> listModelAssist = this.getSqlSession().selectList("selectForCpAttachInfoStoreDetail", objid);
+		return listModelAssist;
+	}
+	
+	/**数据删除*/
+	public int delDataForCpAttachInfoStore(int objid) {
+		int successNum = this.getSqlSession().delete("delDataForCpAttachInfoStore", objid);
+		return successNum;
+	}
+	
+	/**子表数据删除*/
+	public int delDataForCpAttachSubinfoStore(int objid,String valueid) {
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("objid", objid);
+		paramMap.put("valueid", valueid);
+		int successNum = this.getSqlSession().delete("delDataForCpAttachSubinfoStore", paramMap);
+		return successNum;
+	}
+	
+	/**多子表数据删除
+	tableid:用来说明删除哪张子表的数据
+	objid：对象objid
+	value:值次序id*/
+	public int delDataForCpAttachSubinfoStore(int objid,String valueid,String tableid) {
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("objid", objid);
+		paramMap.put("valueid", valueid);
+		paramMap.put("tableid", tableid);
+		int successNum = this.getSqlSession().delete("delDataForCpAttachSubinfoStore", paramMap);
+		return successNum;
+	}
+	
+	/**基本数据表删除 有空间表
+	objid:对象objid
+	spacename:空间表名*/
+	public int delDataForCpAttachInfoStore(int objid,String tablename) {
+		SpaceInfo spaceInfo = new SpaceInfo();
+		spaceInfo.setObjid(objid);
+		spaceInfo.setTablename(tablename);
+		int successNum = this.getSqlSession().delete("delSpace", spaceInfo);
+		return successNum;
+	}	
+	
+	/**获取对象名称列表*/
+	public List<String> selectObjname(int objtypeid) {
+		return this.getSqlSession().selectList("selectObjname",objtypeid);
+	}
+	
+	/**附件添加方法*/
+	public int addDataToCpAttachSubinfoStore(List<AttachSubinfoStore> paramList) {
+		int successNum = this.getSqlSession().insert("addDataToCpAttachSubinfoStore",paramList);
+		return successNum;
+	}
+	
+	/**子表循环更新方法*/
+	public int updDataToCpAttachSubinfoStore(List<AttachSubinfoStore> paramList) {
+		int successNum = this.getSqlSession().update("updDataToCpAttachSubinfoStore",paramList);
+		return successNum;
+	}
+	
+	/**根据objid查询cp_attach_infostore中的记录*/
+	public List<AttachInfoStore> selectAttachinfostoreByobjid(int objid){
+		return this.getSqlSession().selectList("selectAttachinfostoreByobjid",objid);
+	}
+	
+	/**获取空间表对象坐标*/
+	public List<SpaceInfo> getGeomList(Map<String, Object> map) {
+		return this.getSqlSession().selectList("getGeomList",map);
+	}
+	
+	/**数据更新 有空间数据（cp_info_obj,然后cp_attach_infostore）
+	objtypeid  : 对象类型id  
+	objnameKey : 对象名称的fieldid
+	spacename 空间表名*/
+	public int baseUpd(HttpServletRequest request, String objnameKey, String space_tablename) {
+		int result = updDataToCpInfoObj(request,objnameKey);
+		updDataToCpAttachInfoStore(request,space_tablename);
+		return result;
+	}
+	
+	/**cp_attach_infostore表 更新数据-有空间数据(基本数据表)
+	对象objid
+	!name.equals("attachuploadman") || !name.equals("attachfilePath") || !name.equals("attachfieldId")
+	tablename 空间表名*/
+	public int updDataToCpAttachInfoStore(HttpServletRequest request, String space_tablename) {
+		int successNum = 0;
+		List<AttachInfoStore> paramList = new ArrayList<AttachInfoStore>();
+		String objidStr = request.getParameter("objid");
+		int objid = objidStr.equals("")?0:Integer.valueOf(objidStr);
+		String shape = "";
+		Enumeration e = request.getParameterNames();
+		while (e.hasMoreElements()) {
+			String name = (String) e.nextElement();// UI key
+			String value = request.getParameter(name);// UI value
+			AttachInfoStore attachInfoStore = new AttachInfoStore();
+			if(!name.equals("objid") && !name.equals("shape") && !name.equals("attachuploadman") && !name.equals("attachfilePath") && !name.equals("attachfieldId")
+					&& !name.equals("attachwdname") && !name.equals("attachwdtype")){
+				attachInfoStore.setFieldid(Long.valueOf(name));
+				attachInfoStore.setFieldvalue(value);
+				attachInfoStore.setObjid(objid);
+			}
+			paramList.add(attachInfoStore);
+			
+			if(name.equals("shape")){
+				shape=value;
+			}
+		}
+		
+		successNum = this.getSqlSession().update("updDataToCpAttachInfoStore",
+				paramList);
+		
+		//此处做如果对象字段信息缺失用来补充数据的操作
+		List<AttachInfoStore> datalist = selectAttachinfostoreByobjid(objid);
+		if(datalist.size() > 0 && paramList.size()>0){
+			for(int i = 0; i < datalist.size(); i++){
+				for(int j = 0; j < paramList.size(); j++){
+					if(datalist.get(i).getFieldid() == paramList.get(j).getFieldid()){
+						paramList.remove(paramList.get(j));
+					}
+				}
+			}
+			if(paramList.size() > 0){
+				this.getSqlSession().insert("addDataToCpAttachInfoStore",paramList);
+			}
+		}
+		Map<String, Object> map = new LinkedHashMap<String, Object>();
+		map.put("shape", shape);
+		map.put("space_tablename", space_tablename);
+		map.put("objid", objid);
+		this.getSqlSession().update("updSpaceInfo",map);
+		return successNum;
+	}
+	
+	/**子表数据列表*/
+	public List<AttachSubinfoStore> selectForCpAttachSubinfoStore(Map<String, Object> map,String sql) {
+		sql=sql.equals("")?"selectForCpAttachSubinfoStoreList":sql;
+		List<AttachSubinfoStore> listModelAssist = this.getSqlSession().selectList(sql, map);
+		return listModelAssist;
+	}
+	
+	/**批量删除-通过objids删除基本表数据/子表数据/空间表数据*/
+	public int delDataByObjids(String objids, String space_tablename) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objids", objids);
+		map.put("space_tablename", space_tablename);
+		int successNum = this.getSqlSession().delete("delDataByObjids", map);
+		return successNum;
+	}
+	
+	/** 获取监测数据最新时间*/
+	public String selectMaxTime(String time_formt,String dataguid){
+		Map<String, Object> map = new HashMap<String, Object>();
+		if (time_formt != null && !"".equals(time_formt)) {
+			map.put("time_formt", time_formt);//时间格式
+		} else {
+			map.put("time_formt", "yyyy-MM-dd HH24:MI:ss");//时间格式
+		}
+		map.put("dataguid", dataguid);
+		return this.getSqlSession().selectOne("selectMaxTime", map);
+	}
+	
+	
+	/** 通过设备类型获取监测数据最新时间*/
+	public String getMaxTimeByDtid(String time_formt, String devicetypeid, String objid){
+		Map<String, Object> map = new HashMap<String, Object>();
+		if (time_formt != null && !"".equals(time_formt)) {
+			map.put("time_formt", time_formt);//时间格式
+		} else {
+			map.put("time_formt", "yyyy-MM-dd HH24:MI:ss");//时间格式
+		}
+		map.put("devicetypeid", devicetypeid);
+		//objid不传默认查询设备类型下所有对象监测数据的最新时间
+		map.put("objid", objid);
+		return this.getSqlSession().selectOne("getMaxTimeByDtid", map);
+	}
+	
+	
+	/** 添加用户操作日志 
+	 *	@param userid 		用户id
+	 *	@param username		用户真实姓名
+	 *	@param ip			IP地址
+	 *	@param logtype		日志类型
+	 *	@param moduletype 	模块分类
+	 *	@param logcontent 	日志内容
+	 *	@param resultmessage结果返回消息
+	 *	@param resultstate	结果状态
+	 *	@param exceptioninfo异常信息
+	 *  @param memo 		备注
+	 *  @param devicetype	设备类型
+	 */
+	public int addUserOperateLog(String logtype,String moduletype,String logcontent,String resultmessage,String resultstate,String exceptioninfo,String memo){
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("userid", session.getAttribute("userid") == null ? "空用户" : session.getAttribute("userid").toString());
+		map.put("username", session.getAttribute("username") == null ? "空用户" : session.getAttribute("username").toString());
+		//调用获取IP地址的方法获取设备ip地址
+		map.put("ip", GetIPAddress.getIpAddr(request) == null ? "" : GetIPAddress.getIpAddr(request));
+		System.out.println(GetIPAddress.getIpAddr(request));
+		map.put("logtype", logtype);
+		map.put("moduletype", moduletype);
+		map.put("logcontent", logcontent);
+		map.put("resultmessage", resultmessage);
+		map.put("resultstate", resultstate);
+		map.put("exceptioninfo", exceptioninfo);
+		map.put("memo", memo);
+		//调用获取设备信息的方法获取设备类型和设备名称
+		String devicetype = GetDeviceInfo.check(request.getHeader("User-Agent").toLowerCase()) ? "移动设备" : "PC设备";
+		String devicename = GetDeviceInfo.getDeviceName(request.getHeader("User-Agent").toLowerCase());
+		map.put("devicetype", devicetype+"("+devicename+")");
+		System.out.println(devicetype+"("+devicename+")");
+		return this.getSqlSession().insert("addUserOperateLog",map);
+	}
+
+}

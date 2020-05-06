@@ -1,0 +1,9 @@
+package wy.qingdao_atmosphere.reportform.service;
+
+import java.util.List;
+import java.util.Map;
+
+public interface ReportformService {
+	//查询大气站点的设备
+	public List<Map<String, Object>> getwz(String objtypeid);
+}

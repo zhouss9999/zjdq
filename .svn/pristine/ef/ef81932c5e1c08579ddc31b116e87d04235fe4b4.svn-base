@@ -1,0 +1,424 @@
+package wy.qingdao_atmosphere.mobile.web;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpSession;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import com.aliyuncs.dysmsapi.model.v20170525.QuerySendDetailsResponse;
+import com.aliyuncs.dysmsapi.model.v20170525.SendSmsResponse;
+
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+import wy.qingdao_atmosphere.mobile.domain.AirGoodRate;
+import wy.qingdao_atmosphere.mobile.domain.WeatherForecastData;
+import wy.qingdao_atmosphere.mobile.service.AirAppService;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.rolepower.domain.User;
+import wy.qingdao_atmosphere.rolepower.domain.UserRole;
+import wy.qingdao_atmosphere.rolepower.service.RolePowerService;
+import wy.util.SmsUtil;
+import wy.util.datapersistence.Dao.BaseaddDao;
+
+@Controller
+public class AirAppController {
+	
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired
+	private AirAppService airAppService;
+	
+	@Autowired
+	private HttpSession session;
+	
+	@Autowired
+	private RolePowerService rolepowerService;
+
+	/**===================================================================================================
+	 * ================================================一手机端-首页===========================================*/	
+	/**
+	 * @author 五易科技
+	 * @description 首页-获取城市空气质量以及天气预报
+	 */
+	@RequestMapping(value = "/getSKQfCity.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getSKQfCity(HttpServletRequest request){
+		Logger.getLogger("").info("------------首页-获取城市空气质量数据以及天气预报数据---");
+		
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		
+		AirCollect kqzl = airAppService.getSKQ4City(request);
+		
+		resultMap.put("kqzl", kqzl);
+		//resultMap.put("tqyb", "暂无数据");
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 首页-获取收藏夹城市列表以及监测数据
+	 */
+	@RequestMapping(value = "/getSKQfCitys.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirCollect> getSKQfCitys(HttpServletRequest request){
+		Logger.getLogger("").info("------------首页-获取收藏夹城市列表以及监测数据---");
+		
+		List<AirCollect> cityList = airAppService.getSKQ4Citys(request);
+		
+		return cityList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 首页-获取收藏时间
+	 */
+	@RequestMapping(value = "/getSCollTime.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getSCollTime(){
+		Logger.getLogger("").info("------------首页-获取收藏时间--");
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+		Map<String, Object> map = new LinkedHashMap<String, Object>();
+		
+		map.put("colltime", sdf.format(new Date()));
+		return map;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 首页-城市收藏(添加城市空气质量信息)
+	 */
+	@RequestMapping(value="/addSCity.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public int addSCity(HttpServletRequest request){
+		Logger.getLogger("").info("------------首页-城市收藏(添加城市空气质量信息)---");
+		
+		int objid = baseaddDao.baseAdd(request,  3, "3010001");
+		
+		return objid;
+	}
+	
+	/**
+	 * @author 五易科技
+	 * @description 首页-城市移除(移除城市空气质量信息)
+	 */
+	@RequestMapping(value="/delSCity.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public int delSCity(HttpServletRequest request){
+		Logger.getLogger("").info("------------首页-城市移除(移除城市空气质量信息)---");
+		
+		//多个objid用逗号隔开
+		String objids = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "0" : request.getParameter("objid");
+		
+		int status = baseaddDao.delDataByObjids(objids, "");
+		
+		return status;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 首页-获取城市下的站点列表以及监测数据
+	 */
+	@RequestMapping(value = "/getSKQfSites.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<KqzlColl> getSKQfSites(HttpServletRequest request){
+		Logger.getLogger("").info("------------首页-获取城市下的站点列表以及监测数据---");
+		
+		List<KqzlColl> resultList = airAppService.getSKQ4Sites(request);
+		
+		return resultList;
+	}
+	
+	/**
+	 * @author 五易科技
+	 * @description 首页-单个站点监测数据详情
+	 */
+	@RequestMapping(value = "/getSKQfSite.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getSKQfSite(HttpServletRequest request){
+		Logger.getLogger("").info("------------首页-单个站点监测数据详情---");
+		
+		Map<String, Object> resultMap = airAppService.getSKQ4Site(request);
+		
+		return resultMap;
+	}
+	
+
+	/**===================================================================================================
+	 * ================================================一手机端-大气地图===========================================*/		
+	/**
+	 * @author 五易科技
+	 * @description 大气地图-获取城市所有站点坐标以及监测参数数据(浓度)
+	 */
+	@RequestMapping(value = "/getMNDfSites.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<KqzlColl> getMNDfSites(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气地图-获取城市所有站点坐标以及监测参数数据(浓度)---");
+		
+		List<KqzlColl> resultList = airAppService.getMND4Sites(request);
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气地图-获取单个站点监测数据详情(浓度)
+	 */
+	@RequestMapping(value = "/getMNDfSite.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getMNDfSite(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气地图-获取单个站点监测数据详情(浓度)---");
+		
+		Map<String, Object> resultMap = airAppService.getMND4Site(request);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气地图-获取城市所有站点坐标以及监测参数数据(优良率)
+	 */
+	@RequestMapping(value = "/getMYLfSites.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirGoodRate> getMYLfSites(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气地图-获取城市所有站点坐标以及监测参数数据(优良率)---");
+		
+		List<AirGoodRate> resultList = airAppService.getMYL4Sites(request);
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气地图-获取单个站点监测数据详情(优良率)
+	 */
+	@RequestMapping(value = "/getMYLfSite.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getMYLfSite(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气地图-获取单个站点监测数据详情(优良率)---");
+		
+		Map<String, Object> resultMap = airAppService.getMYL4Site(request,30);
+		
+		return resultMap;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================一手机端-大气排名===========================================*/	
+	/**
+	 * @author 五易科技
+	 * @description 大气排名-获取城市所有站点实时AQI排名
+	 */
+	@RequestMapping(value = "/getRAQfSites.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<KqzlColl> getRAQfSites(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气排名-获取城市所有站点实时AQI排名---");
+		
+		List<KqzlColl> resultList = airAppService.getRAQ4Sites(request);
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气排名-获取单个站点AQI数据详情
+	 */
+	@RequestMapping(value = "/getRAQfSite.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getRAQfSite(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气排名-获取单个站点AQI数据详情---");
+		
+		Map<String, Object> resultMap = airAppService.getMND4Site(request);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气排名-获取城市所有站点近7天优良率排名
+	 */
+	@RequestMapping(value = "/getRYLfWeeks.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirGoodRate> getRYLfWeeks(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气排名-获取城市所有站点近7天优良率排名---");
+		
+		List<AirGoodRate> resultList = airAppService.getRYLSites(request, 7);
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气排名-获取单个站点近7天优良率详情
+	 */
+	@RequestMapping(value = "/getRYLfWeek.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getRYLfWeek(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气排名-获取单个站点近7天优良率详情---");
+		
+		Map<String, Object> resultMap = airAppService.getMYL4Site(request,7);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气排名-获取城市所有站点近30天优良率排名
+	 */
+	@RequestMapping(value = "/getRYLfMonths.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirGoodRate> getRYLfMonths(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气排名-获取城市所有站点近30天优良率排名---");
+		
+		List<AirGoodRate> resultList = airAppService.getRYLSites(request, 30);
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 大气排名-获取单个站点近30天优良率详情
+	 */
+	@RequestMapping(value = "/getRYLfMonth.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getRYLfMonth(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气排名-获取单个站点近30天优良率详情---");
+		
+		Map<String, Object> resultMap = airAppService.getMYL4Site(request,30);
+		
+		return resultMap;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================一手机端-系统信息===========================================*/	
+	/**
+	 * @author 五易科技
+	 * @description 系统信息-意见反馈
+	 */
+	@RequestMapping(value="/suggestion.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public int suggestions(HttpServletRequest request){
+		Logger.getLogger("").info("------------系统信息-意见反馈------");
+		
+		int objid = baseaddDao.baseAdd(request,  7, "7010001");
+		
+		return objid;
+	}
+	
+	/**===================================================================================================
+	 * ==============================================手机端-天气预报===========================================*/	
+	/**
+	 * @author 五易科技
+	 * @description 手机端-天气预报
+	 */
+	@RequestMapping(value="/getMobileWeatherForecastData.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<WeatherForecastData> getMobileWeatherForecastData(HttpServletRequest request){
+		Logger.getLogger("").info("------------手机端-天气预报------");
+		return airAppService.getMobileWeatherForecastData(request);
+	}
+	//手机端注册
+	@SuppressWarnings("unchecked")
+	@RequestMapping(value="/getRegister.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Object getRegister(User user,HttpServletRequest request){
+		Map<String,Object> returnMap = new HashMap<String, Object>();
+		//验证码
+		String value = request.getParameter("value") == null?"":request.getParameter("value").toString();
+		try {
+			Map<String,Object> SMSmap = (Map<String, Object>) session.getAttribute("SMS");
+			if(SMSmap!=null&&SMSmap.size()!=0){
+				if((user.getPhone()).equals(SMSmap.get("TelephoneNumber"))&&value.equals(SMSmap.get("value"))){
+					user.setIscomm("否");
+					rolepowerService.addUserService(user);//注册用户
+					UserRole u= new UserRole();
+					u.setRole_id(user.getRole_id());//公众角色9473bbd3e08cb2d3f5f691a81841264e
+					u.setUsername(user.getUsername());
+					rolepowerService.addUserRoleService(u);//插入角色
+					returnMap.put("message", "注册成功！");
+					returnMap.put("state", true);
+					return returnMap;
+				}
+			}
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		returnMap.put("message", "注册失败！");
+		returnMap.put("state", false);
+		return returnMap;
+	}
+	//发送短信
+	@SuppressWarnings("unchecked")
+	@RequestMapping(value="/SendMessage.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Object SendMessage(HttpServletRequest request){
+		Map<String,Object> returnMap = new HashMap<String, Object>();
+		String TelephoneNumber = request.getParameter("TelephoneNumber") == null?"":request.getParameter("TelephoneNumber").toString();
+		int value = (int)((Math.random()*9+1)*100000);
+		Map<String,Object> SMSmap = (Map<String, Object>) session.getAttribute("SMS");
+		if(SMSmap!=null&&SMSmap.size()!=0){
+			if(TelephoneNumber.equals(SMSmap.get("TelephoneNumber"))){
+				Long nowTime = System.currentTimeMillis();
+				Long time = (Long) SMSmap.get("time");
+				if((nowTime-time)<60000){
+					returnMap.put("message", "发送过于频繁，请稍后再试！");
+					returnMap.put("state", false);
+					return returnMap;
+				}
+			}
+		}
+		try {
+			//发短信
+	        SendSmsResponse response = SmsUtil.sendSms(TelephoneNumber,value);
+//	        System.out.println("短信接口返回的数据----------------");
+//	        System.out.println("Code=" + response.getCode());
+//	        System.out.println("Message=" + response.getMessage());
+//	        System.out.println("RequestId=" + response.getRequestId());
+//	        System.out.println("BizId=" + response.getBizId());
+	        if(!("OK").equals(response.getMessage())){
+	        	returnMap.put("message", "发送失败！"+response.getMessage());
+				returnMap.put("state", false);
+	        }else{
+	        	Map<String,Object> map = new HashMap<String, Object>();
+	        	map.put("value", value);//验证码
+	        	map.put("TelephoneNumber", TelephoneNumber);
+	        	map.put("time", System.currentTimeMillis());
+	        	session.setAttribute("SMS", map);
+	        	returnMap.put("message", "发送成功！");
+				returnMap.put("state", true);
+	        }
+		} catch (Exception e) {
+			returnMap.put("message", "系统服务异常，发送失败！");
+			returnMap.put("state", false);
+			e.printStackTrace();
+		}
+		return returnMap;
+	}
+}

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.util.datapersistence.dpmapper">
+	
+	<!-- 对象表添加数据 -->
+	<insert id="addDataToCpInfoObj" keyProperty="objid" useGeneratedKeys="true" parameterType="wy.util.datapersistence.InfoObj">  
+    	insert into cp_info_obj(objid,objtypeid,objname,objnum,remark,isused)  values(nextval('cp_info_obj_id_seq'),#{objtypeid},#{objname},'','',1)  
+	</insert> 
+	
+	<!-- 基本表添加数据 -->
+	<insert id="addDataToCpAttachInfoStore" parameterType="java.util.List" useGeneratedKeys="true">
+		insert into cp_attach_infostore(infoid,objid,fieldid,fieldvalue)
+		values
+		<foreach collection="list" item="item" index="index"
+			separator=",">
+			(nextval('cp_attach_infostore_id_seq'),#{item.objid},#{item.fieldid},#{item.fieldvalue})
+		</foreach>
+	</insert>
+	
+	<!-- 子表添加数据 -->
+	<insert id="addDataToCpAttachSubinfoStore" parameterType="java.util.List" useGeneratedKeys="true">
+		insert into cp_attach_subinfostore(subinfoid,objid,fieldid,fieldvalue,valueid)
+		values
+		<foreach collection="list" item="item" index="index"
+			separator=",">
+			(nextval('cp_attach_subinfostore_subinfoid_seq'),#{item.objid},#{item.fieldid},#{item.fieldvalue},#{item.valueid})
+		</foreach>
+	</insert>
+	
+	<!-- 空间表添加数据 -->
+	<insert id="addSpaceInfo" parameterType="wy.util.datapersistence.SpaceInfo">
+		insert into ${tablename} (objid,id,shape)
+		values (${objid},${id},ST_GeomFromText('POINT(${shape})', 4326 ))
+	</insert>
+	
+	<!-- 查询子表最大valueid -->
+	<select id="selectMaxValueid" parameterType="int" resultType="int">
+		select max(valueid::numeric) from cp_attach_subinfostore where objid = ${_parameter} 
+	</select>
+	
+	<!-- 基本表数据更新 -->
+	<update id="updDataToCpAttachInfoStore" parameterType="java.util.List">
+	
+		<foreach collection="list" item="item" index="index">
+			update cp_attach_infostore set fieldvalue = 
+			#{item.fieldvalue} where objid = #{item.objid} and fieldid = #{item.fieldid};
+		</foreach>
+	</update>
+	
+	<!-- 对象表数据更新 -->
+	<update id="updDataToCpInfoObj"  parameterType="wy.util.datapersistence.InfoObj">  
+    	update cp_info_obj set objname = #{objname} where objid = ${objid}  
+	</update> 
+	
+	<!-- 子表数据更新 -->
+	<update id="updDataToCpAttachSubinfoStore" parameterType="java.util.List">
+
+		<foreach collection="list" item="item" index="index">
+			update cp_attach_subinfostore set fieldvalue = 
+			#{item.fieldvalue} where objid = #{item.objid} and fieldid = #{item.fieldid} and valueid = #{item.valueid};
+		</foreach>
+	</update>
+	
+	<!-- 基本表数据删除 -->
+	<delete id="delDataForCpAttachInfoStore" parameterType="int">
+		delete from cp_attach_infostore where objid = ${_parameter};
+		delete from cp_attach_subinfostore where objid = ${_parameter};
+		delete from cp_info_obj where objid = ${_parameter};
+	</delete>
+	
+	<!-- 子表数据删除 -->
+	<delete id="delDataForCpAttachSubinfoStore" parameterType="map">
+		delete from cp_attach_subinfostore where objid = ${objid} and valueid = #{valueid,jdbcType=VARCHAR}
+		<if test="tableid != null and tableid != ''">
+		and fieldid in (select fieldid from cp_config_tableinfo where tableid = ${tableid});
+		</if>
+	</delete>
+	
+	<!-- 基本表数据删除 有空间表数据 -->
+	<delete id="delSpace" parameterType="wy.util.datapersistence.SpaceInfo">
+		delete from cp_attach_infostore where objid = ${objid};
+		delete from cp_attach_subinfostore where objid = ${objid};
+		delete from cp_info_obj where objid = ${objid};
+		delete from ${tablename} where objid = ${objid};
+	</delete>
+	
+	<!-- 对象基本信息查询 -->
+	<select id="selectForCpAttachInfoStore" resultType="wy.util.datapersistence.ModelAssist" parameterType="map">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue  from
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		and b.tableid = c.tableid and c.objtypeid = ${objtypeid}
+		<if test="qyname != null and qyname != '' ">
+			and a.objid in(
+				select objid from cp_attach_infostore where (fieldid=${fieldid} and fieldvalue=#{qyname})
+			) 
+		</if>
+		order by objid desc,fieldid
+		<!-- limit #{pageNums,jdbcType=INTEGER}*#{lineNums,jdbcType=INTEGER} offset #{currentPage,jdbcType=INTEGER}*#{pageNums,jdbcType=INTEGER}*#{lineNums,jdbcType=INTEGER} -->
+	</select>
+	
+	<!-- 子表信息详情查询-->
+	<select id="selectForCpAttachSubinfoStore" resultType="wy.util.datapersistence.AttachSubinfoStore" parameterType="int">
+		select b.fieldname,a.* from cp_attach_subinfostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid and b.tableid = c.tableid and a.objid =  ${_parameter} order by objid, valueid desc,fieldid
+	</select>
+	
+	<!-- 基本信息-详情查询 -->
+	<select id="selectForCpAttachInfoStoreDetail" resultType="wy.util.datapersistence.ModelAssist" parameterType="int">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from
+		cp_attach_infostore a , cp_config_tableinfo b 
+		where a.fieldid = b.fieldid and a.objid = ${_parameter}
+		order by objid,fieldid		
+	</select>
+	
+	<!-- 对象名称查询 -->
+	<select id="selectObjname" resultType="string" parameterType="int">
+		select objname from cp_info_obj where objtypeid = ${_parameter}
+	</select>
+	
+	<!-- 根据objid查询cp_attach_infostore中的记录 -->
+	<select id="selectAttachinfostoreByobjid" parameterType="int" resultType="wy.util.datapersistence.AttachInfoStore">
+		select * from cp_attach_infostore where objid = #{parameter,jdbcType=VARCHAR}
+	</select>
+	
+	<!-- 获取空间表对象坐标 -->
+	<select id="getGeomList" parameterType="map" resultType="wy.util.datapersistence.SpaceInfo">
+		select objid,id,st_AsText(shape) shape from ${space_tablename}
+		<where>
+			<if test="objid != null and objid != ''">
+				and objid in (${objid})
+			</if>
+		</where>
+	</select>
+
+	<!-- 空间表更新数据 -->
+	<update id="updSpaceInfo" parameterType="map">
+		UPDATE ${space_tablename} SET shape = ST_GeomFromText('POINT(${shape})', 4326 ) WHERE objid = #{objid}
+	</update>
+	
+	<!-- 子表信息条件查询-->
+	<select id="selectForCpAttachSubinfoStoreList" resultType="wy.util.datapersistence.AttachSubinfoStore" parameterType="map">
+		select b.fieldname,a.* from cp_attach_subinfostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid and b.tableid = c.tableid and a.objid in (${objid}) 
+		<if test="keyword != null and keyword != ''">
+			and a.valueid in (select distinct valueid from cp_attach_subinfostore where objid in (${objid})
+				and (fieldid = ${fieldid} and fieldvalue like concat(concat('%',#{keyword}),'%')))
+		</if>
+		order by objid, valueid desc,fieldid
+	</select>
+	
+	<!-- 批量删除-通过objids删除基本表数据/空间表数据 -->
+	<delete id="delDataByObjids" parameterType="map">
+		delete from cp_attach_infostore where objid in (${objids});
+		delete from cp_attach_subinfostore where objid in (${objids});
+		delete from cp_info_obj where objid in (${objids});
+		<if test="space_tablename != null and space_tablename != ''">
+			delete from ${space_tablename} where objid in (${objids});
+		</if>
+	</delete>
+	
+	<!-- 查询监测数据最新时间 -->
+	<select id="selectMaxTime" resultType="string" parameterType="map">
+		select to_char(max(cp_collect_actual.collecttime),#{time_formt}) from cp_collect_actual where dataguid like #{dataguid}
+	</select>
+	
+	<!-- 通过设备类型获取监测数据最新时间 -->
+	<select id="getMaxTimeByDtid" resultType="string" parameterType="map">
+		select to_char(max(cp_collect_actual.collecttime),#{time_formt}) from cp_collect_actual where dataguid  
+		in (select dataguid from cp_connect_objparam where 
+			devicenumber in (select devicenumber from cp_info_device where devicetypeid in (${devicetypeid}))
+			<if test="objid != null and objid != ''">
+				and objid in (${objid})
+			</if>
+		)
+	</select>
+	
+	<!-- 添加用户操作日志  -->
+	<insert id="addUserOperateLog" parameterType="map">
+		insert into tb_uim_useroperate_log(userid,username,ip,logtype,moduletype,logcontent,resultmessage,resultstate,exceptioninfo,memo,devicetype,createtime) 
+		values (#{userid},#{username},#{ip},#{logtype},#{moduletype},#{logcontent},#{resultmessage},#{resultstate},#{exceptioninfo},#{memo},#{devicetype},now()::timestamp(0)without time zone)
+	</insert>
+	
+</mapper>

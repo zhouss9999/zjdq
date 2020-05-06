@@ -1,0 +1,30 @@
+package wy.qingdao_atmosphere.countrysitedata.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import wy.qingdao_atmosphere.countrysitedata.domain.Param;
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.countrysitedata.domain.SiteData;
+
+public interface SiteDataDao {
+	
+	//同步监测数据到数据库
+	public int addCollectData(List<SiteData> list);
+	
+	//获取设备类型关联参数
+	public List<Param> getParamByDtid(Map<String, Object> map);
+	
+	//获取设备类型下参数辅助对象
+	public List<ParamAssis> getParamAssisByDtid(Map<String, Object> map);
+	
+	//删除指定时间之前的监测数据
+	public int delCollData(Map<String, Object> map);
+	
+	//通过objtypeid获取objid
+	public List<String> getObjidByOtid(int objtypeid);
+	
+	//获取子表附件的最大时间
+	public String getsubStoreMaxtime(Map<String, Object> map);
+	
+}

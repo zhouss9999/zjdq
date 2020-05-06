@@ -1,0 +1,334 @@
+package wy.qingdao_atmosphere.countanalysis.web;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.qingdao_atmosphere.countanalysis.domain.AreaAlarmCount;
+import wy.qingdao_atmosphere.countanalysis.service.CountService;
+import wy.qingdao_atmosphere.onemap.domain.OmRank;
+import wy.util.datapersistence.service.BaseService;
+
+@Controller
+public class CountController {
+	
+	@Autowired
+	private BaseService baseService;
+	
+	@Autowired
+	private CountService countService;
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-获取城市下区域名称列表
+	 */
+	@RequestMapping(value = "/getAreaName.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<String> getAreaName(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-获取城市下区域名称列表-------");
+		
+		List<String> areaList = countService.getAreaName(request);
+		
+		return areaList;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================统计分析-城市空气质量===================================*/	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-城市空气质量-AQI排名
+	 */
+	@RequestMapping(value = "/getRankByAQI.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getRankByAQI(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-城市空气质量-AQI排名-------");
+		
+		Map<String, Object> resultMap = countService.getRankByAQI(request);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-城市空气质量-微站年度空气质量情况
+	 */
+	@RequestMapping(value = "/getAQIByYear.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getAQIByYear(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-城市空气质量-微站年度空气质量情况-------");
+		
+		Map<String, Object> resultMap = countService.getAQIByYear(request);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-城市空气质量-AQI日历
+	 */
+	@RequestMapping(value = "/getAQICalendar.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmRank> getAQICalendar(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-城市空气质量-AQI日历-------");
+		
+		List<OmRank> resultList = countService.getAQICalendar(request);
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-城市空气质量-空气质量优良率
+	 */
+	@RequestMapping(value = "/getAirGoodrate.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmRank> getAirGoodrate(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-城市空气质量-空气质量优良率-------");
+		
+		List<OmRank> resultList = countService.getAirGoodrate(request);
+		
+		return resultList;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================统计分析-区域统计===================================*/	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-区域统计-空气质量分析
+	 */
+	@RequestMapping(value = "/getAirAnalysis.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getAirAnalysis(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-区域统计-空气质量分析-------");
+		
+		Map<String, Object> resultMap = countService.getAirAnalysis(request);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-区域统计-微站区域分析
+	 */
+	@RequestMapping(value = "/getAreaSiteCount.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getAreaSiteCount(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-区域统计-微站区域分析-------");
+		
+		Map<String, Object> resultMap = countService.getAreaSiteCount(request);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-区域统计-区域报警次数
+	 */
+	@RequestMapping(value = "/getAreaAlarm.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AreaAlarmCount> getAreaAlarm(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-区域统计-区域报警次数-------");
+		
+		List<AreaAlarmCount> result = countService.getAreaAlarm(request);
+		
+		return result;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================统计分析-微站分析===================================*/	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-微站分析(获取微站列表)
+	 */
+	@RequestMapping(value = "/getWzList.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<Map<String,Object>> getWzList(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-微站分析(获取站点列表)-------");
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		//所属区域
+		String area = request.getParameter("area") == null ? "" : request.getParameter("area");
+		
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("objtypeid", 1);
+		paramMap.put("city", city);
+		paramMap.put("area", area);
+		
+		List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(paramMap, "getCountObjInfo");
+		
+		return siteList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-微站分析-多站点分析
+	 */
+	@RequestMapping(value = "/sitesAnalysis.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmRank> sitesAnalysis(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-微站分析-多站点分析-------");
+		
+		List<OmRank> resultList = countService.sitesAnalysis(request);
+		
+		return resultList;
+	}	
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-微站分析-站点首要污染物分析
+	 */
+	@RequestMapping(value = "/sitePpAnalysis.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmRank> sitePpAnalysis(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-微站分析-站点首要污染物分析-------");
+		
+		List<OmRank> resultList = countService.sitePpAnalysis(request);
+		
+		return resultList;
+	}	
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-微站分析-单站点分析
+	 */
+	@RequestMapping(value = "/siteAnalysis.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> siteAnalysis(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-微站分析-单站点分析-------");
+		
+		Map<String, Object> result = countService.siteAnalysis(request);
+		
+		return result;
+	}	
+	
+	
+	/**===================================================================================================
+	 * ================================================统计分析-历史查询===================================*/	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-历史查询-空气质量表形式
+	 */
+	@RequestMapping(value = "/sitesTable.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmRank> sitesTable(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-历史查询-空气质量表形式-------");
+		
+		List<OmRank> result = countService.sitesHistory(request);
+		
+		return result;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-历史查询-空气质量图形式
+	 */
+	@RequestMapping(value = "/sitesChart.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmRank> sitesChart(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-历史查询-空气质量图形式-------");
+		
+		List<OmRank> result = countService.sitesHistory(request);
+		
+		return result;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================统计分析-国控对比===================================*/	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-国控对比-获取国控站点列表
+	 */
+	@RequestMapping(value = "/getGzList.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<Map<String,Object>> getGzList(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-国控对比-获取国控站点列表-------");
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("objtypeid", 5);
+		paramMap.put("city", city);
+		
+		List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(paramMap, "getCountObjInfo");
+		
+		return siteList;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-国控对比-AQI日历
+	 */
+	@RequestMapping(value = "/getAQICalendars.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getAQICalendars(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-国控对比-AQI日历-------");
+		
+		Map<String, Object> result = countService.getAQICalendars(request);
+		
+		return result;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-国控对比-拟合优度
+	 */
+	@RequestMapping(value = "/getLineFit.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getLineFit(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-国控对比-拟合优度-------");
+		
+		Map<String, Object> result = countService.getLineFit(request);
+		
+		return result;
+	}
+	
+	
+	/**
+	 * @author 五易科技
+	 * @description 统计分析-国控对比-空气优良率
+	 */
+	@RequestMapping(value = "/getAirGoodrates.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getAirGoodrates(HttpServletRequest request){
+		Logger.getLogger("").info("------------统计分析-国控对比-空气优良率-------");
+		
+		Map<String, Object> result = countService.getAirGoodrates(request);
+		
+		return result;
+	}
+	
+}

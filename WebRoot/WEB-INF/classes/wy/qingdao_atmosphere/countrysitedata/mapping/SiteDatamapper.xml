@@ -1,0 +1,2046 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.countrysitedata.mapping.SiteDatamapper">
+
+	<!-- 获取设备类型关联参数 -->
+	<select id="getParamByDtid" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.Param">
+		select param.* from cp_info_param param inner join cp_connect_devicetypeparam conn 
+			on param.paramid = conn.paramid
+			and param.isused = 1 and conn.isused = 1 
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and conn.devicetypeid in (${devicetypeid})
+			</if>
+		order by param.paramid
+	</select>
+	
+	<!-- 同步监测数据到数据库-新增 -->
+	<insert id="addCollectData" parameterType="java.util.List">
+		insert into cp_collect_actual(dataid,dataguid,datavalue,collecttime)
+		values
+		<foreach collection="list" item="item" index="index" separator=",">
+			(nextval('cp_collect_actual_id_seq'),#{item.dataguid},#{item.datavalue},#{item.collecttime}::timestamp)
+		</foreach>
+	</insert>
+	
+	
+	<!-- 同步风廓线雷达robs监测数据(实时的采样高度上的产品数据文件)到数据库-新增 -->
+	<insert id="addCollectDataTwo" parameterType="map">
+		insert into cp_collect_actual_${objid}(dataid,dataguid,datavalue,collecttime)
+		values
+		<foreach collection="list" item="item" index="index" separator=",">
+			(nextval('cp_collect_actual_id_seq'),#{item.dataguid},#{item.datavalue},to_timestamp(#{item.collecttime},'yyyyMMddhh24miss'))
+		</foreach>
+	</insert>
+	
+	<!-- 获取设备类型下参数辅助对象 （单个站点）-->
+	<select id="getParamAssisByDtid" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis">
+		select obp.objid,obp.paramid,par.paramname,obp.dataguid,obp.devicenumber,dev.devicename,dev.rmk1 
+			from cp_connect_objparam obp,cp_info_param par,cp_info_device dev
+			where obp.paramid = par.paramid and obp.devicenumber = dev.devicenumber 
+			and obp.isused = 1 and par.isused = 1 and dev.isused = 1
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and dev.devicetypeid in (${devicetypeid})
+			</if>
+		order by obp.objid,obp.paramid
+	</select>
+	
+	<!-- 获取设备类型下参数辅助对象 (多个站点)-->
+	<select id="getParamAssisByDtidTwo" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis">
+		select obp.objid,obp.paramid,par.paramname,obp.dataguid,obp.devicenumber,dev.devicename,dev.rmk1 
+			from cp_connect_objparam obp,cp_info_param par,cp_info_device dev
+			where obp.paramid = par.paramid and obp.devicenumber = dev.devicenumber 
+			and obp.isused = 1 and par.isused = 1 and dev.isused = 1
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and dev.devicetypeid in (${devicetypeid})
+			</if>
+			<if test="objid != null and objid != '' ">
+				and obp.objid in (${objid})
+			</if>
+		order by obp.objid,obp.paramid
+	</select>
+	
+	<!-- 删除指定时间之前的监测数据 -->
+	<delete id="delCollData" parameterType="map">
+		delete from cp_collect_actual 
+		where to_char(collecttime,'yyyy-MM-dd HH24:MI:ss') &lt; #{collecttime}
+		and dataguid in (
+			select obp.dataguid 
+			from cp_connect_objparam obp,cp_info_param par,cp_info_device dev
+			where obp.paramid = par.paramid and obp.devicenumber = dev.devicenumber 
+			and obp.isused = 1 and par.isused = 1 and dev.isused = 1
+			and dev.devicetypeid in (${devicetypeid})
+			order by obp.objid,obp.paramid
+		)
+	</delete>
+	
+	<!-- 通过objtypeid获取objid -->
+	<select id="getObjidByOtid" parameterType="int" resultType="String">
+		select * from cp_info_obj where objtypeid = ${_parameter} and isused = 1
+	</select>
+	
+	<!-- 获取子表附件的最大时间 -->
+	<select id="getsubStoreMaxtime" parameterType="map" resultType="String">
+		select to_char(COALESCE(max(fieldvalue),'1970-01-01 00:00:00')::timestamp,#{timeformat}) from cp_attach_subinfostore where objid in (${objid})
+		and fieldid in (${fieldid})
+	</select>
+	
+	<!-- 添加微波辐射状态报警信息 -->
+	<insert id="addWbfsThrinfo" parameterType="java.util.List" useGeneratedKeys="true">
+		insert into cp_info_threshold(thrid,objid,collecttime,paramid,value,thresholdval,describe,thrtype)
+		values
+		<foreach collection="list" item="item" index="index" separator=",">
+			(nextval('cp_attach_historyinfostore_id_seq'),${item.objid},(#{item.collecttime})::timestamp,${item.paramid},#{item.value},#{item.thresholdval},#{item.describe},#{item.thrtype})
+		</foreach>
+	</insert>
+	<!--从数据库里查询微波辐射计的历史数据  -->
+	<select id="queryWeiBoDate" resultType="map"  parameterType="map">
+		  select max(case when dataguid like '%_87' then datavalue  end)as kx_wdkx,
+		 max(case when dataguid like '%_88' then datavalue  end)as kx_xdsdkx,
+		 max(case when dataguid like '%_89' then datavalue  end)as kx_sqmdkx,
+		 max(case when dataguid like '%_90' then datavalue  end)as kx_zslkx,
+		 max(case when dataguid like '%_91' then datavalue  end)as kx_bjcwdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87','${dataguid}88','${dataguid}89','${dataguid}90','${dataguid}91'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!--从数据库里查询微波辐射计的实时(按分钟匹配)数据  -->
+	<select id="querySsWeiBoDate" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_87' then datavalue  end)as kx_wdkx,
+		 max(case when dataguid like '%_88' then datavalue  end)as kx_xdsdkx,
+		 max(case when dataguid like '%_89' then datavalue  end)as kx_sqmdkx,
+		 max(case when dataguid like '%_90' then datavalue  end)as kx_zslkx,
+		 max(case when dataguid like '%_91' then datavalue  end)as kx_bjcwdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87','${dataguid}88','${dataguid}89','${dataguid}90','${dataguid}91'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="endtime != null and endtime != '' ">
+		   and date_trunc('minute',collecttime)= date_trunc('minute', #{endtime}::timestamp)
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	
+	<!--从数据库里查询风廓线雷达的实时数据  -->
+	<select id="queryWindProfileData" resultType="map"  parameterType="map">
+		select max(case when dataguid like '%_168' then datavalue  end)as spfx,
+		 max(case when dataguid like '%_169' then datavalue  end)as spfs,
+		 max(case when dataguid like '%_170' then datavalue  end)as czfs,
+		 max(case when dataguid like '%_171' then datavalue  end)as spfxkxd,
+		 max(case when dataguid like '%_172' then datavalue  end)as czfxkxd,
+		 max(case when dataguid like '%_173' then datavalue  end)as cn2,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}168','${dataguid}169','${dataguid}170','${dataguid}171','${dataguid}172','${dataguid}173') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!-- 查询方位角度与俯仰角度 -->
+	<select id="queryFwAndFy"  resultType="map" >
+	  select max((case when dataguid like '%_49' then datavalue end)) as fwjd,
+             max((case when dataguid like '%_50' then datavalue  end)) as fyjd,
+             collecttime
+      from
+      (select  dataid,dataguid,datavalue,collecttime from cp_collect_actual where dataguid in('12_43_36814568_49','12_43_36814568_50') order by collecttime desc)temp
+      group by collecttime 
+      order by collecttime desc 
+      limit 1 
+	</select>
+	
+	<!-- 通过设备类型获取OOBS监测数据最新时间 -->
+	<select id="getOOBSMaxTimeByDtid" resultType="string" parameterType="map">
+		select to_char(max(cp_collect_actual_oobs.collecttime),#{time_formt}) from cp_collect_actual_oobs where dataguid  
+		in (select dataguid from cp_connect_objparam where 
+			devicenumber in (select devicenumber from cp_info_device where devicetypeid in (${devicetypeid}))
+			<if test="objid != null and objid != ''">
+				and objid in (${objid})
+			</if>
+		)
+	</select>
+	
+	<!-- 获取温度平流所需参数数据（辐射计的和风廓线的联合查询） -->
+	<select id="getTemperatureParam" resultType="map"  parameterType="map">
+  select  fkx.*,fsj.wd ,fsj.yq from
+     (select collecttime ,
+        max(case when dataguid in('${fkxDataguid}168') then datavalue end)  as spfx,
+        max(case when dataguid in('${fkxDataguid}169') then datavalue end)  as spfs
+    from(select  * from cp_collect_actual_${fkxObjid} where dataguid in ('${fkxDataguid}168','${fkxDataguid}169'))temp
+    group by collecttime
+    order by collecttime desc)fkx
+  inner join
+    (select collecttime ,
+        max(case when dataguid in('${fsjDataguid}46') then datavalue end)  as wd,
+        max(case when dataguid in('${fsjDataguid}48') then datavalue end)  as yq   
+   from(select  * from cp_collect_actual_${fsjObjid} where dataguid in ('${fsjDataguid}46','${fsjDataguid}48'))temp
+   group by collecttime
+   order by collecttime desc)fsj
+   on date_trunc('minute', fkx.collecttime)>=date_trunc('minute', fsj.collecttime - interval '6 minutes')
+   and date_trunc('minute', fkx.collecttime)&lt;=date_trunc('minute', fsj.collecttime )
+   where fkx.collecttime>=#{begintime}::timestamp and
+   fkx.collecttime&lt;=#{endtime}::timestamp
+	</select>
+	
+	<!-- 查询站点纬度 -->
+	<select id="qureyLatitude" resultType="java.lang.String"  parameterType="map">
+	 select fieldvalue as weidu from cp_attach_infostore where objid = ${fkxObjid} and fieldid =28010007
+	</select>
+	
+	
+	<!-- 获取湿气通量的数据（辐射计的和风廓线的联合查询） -->
+	<select id="getWaterVapor" resultType="map"  parameterType="map">
+  select  fkx.czfs,fkx.spfs,fsj.* from
+     (select collecttime ,
+        max(case when dataguid in('${fkxDataguid}170') then datavalue end)  as czfs,
+        max(case when dataguid in('${fkxDataguid}169') then datavalue end)  as spfs
+    from(select  * from cp_collect_actual_${fkxObjid} where dataguid in ('${fkxDataguid}170','${fkxDataguid}169'))temp
+    group by collecttime
+    order by collecttime desc)fkx
+  inner join
+    (select collecttime ,
+        max(case when dataguid in('${fsjDataguid}46') then datavalue end)  as wd,
+        max(case when dataguid in('${fsjDataguid}48') then datavalue end)  as yq,
+        max(case when dataguid in('${fsjDataguid}87') then datavalue end)  as wdkx,
+        max(case when dataguid in('${fsjDataguid}88') then datavalue end)  as sdkx
+   from(select  * from cp_collect_actual_${fsjObjid} where dataguid in ('${fsjDataguid}46','${fsjDataguid}48','${fsjDataguid}87',
+   '${fsjDataguid}88'))temp
+   group by collecttime
+   order by collecttime desc)fsj
+   on date_trunc('minute', fkx.collecttime)>=date_trunc('minute', fsj.collecttime - interval '6 minutes')
+   and date_trunc('minute', fkx.collecttime)&lt;=date_trunc('minute', fsj.collecttime )
+   where  date_trunc('minute', fkx.collecttime)>=date_trunc('minute', #{endtime}::timestamp - interval '6 minutes')
+   and date_trunc('minute', fkx.collecttime)&lt;=date_trunc('minute', #{endtime}::timestamp )
+   order by collecttime desc
+   limit 1
+	</select>
+	
+	<!-- 根据站点编号查询风廓线站点的objid,objtypeid,devicenumber等 -->
+	<select id="queryByStaNum" resultType="map"  parameterType="map">
+	  select distinct o.*,d.devicenumber from
+      (select * from cp_info_obj where objid in (select objid from cp_attach_infostore where fieldid =28010003 and fieldvalue=#{qzbh}))o
+      left join 
+      (select * from cp_connect_objparam )d
+      on o.objid=d.objid
+	</select>
+	
+	
+	<!-- 根据objid查询风廓线站点的objid,objtypeid,devicenumber等 -->
+	<select id="getDataguidByOid" resultType="map"  parameterType="map">
+	  select distinct obj.*,obp.devicenumber from cp_info_obj obj left join cp_connect_objparam obp on obj.objid =obp.objid  
+      where obj.objid=${objid}
+	</select>
+	
+	
+	<!--从数据库获取历史（最近12个小时）的微波辐射计基础数据K的8个通道亮温值数据 -->
+	<select id="queryTdlwforK" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_53' then datavalue  end)as jc_k1,
+		 max(case when dataguid like '%_54' then datavalue  end)as jc_k2,
+		 max(case when dataguid like '%_55' then datavalue  end)as jc_k3,
+		 max(case when dataguid like '%_56' then datavalue  end)as jc_k4,
+		 max(case when dataguid like '%_57' then datavalue  end)as jc_k5,
+		 max(case when dataguid like '%_58' then datavalue  end)as jc_k6,
+		 max(case when dataguid like '%_59' then datavalue  end)as jc_k7,
+		 max(case when dataguid like '%_60' then datavalue  end)as jc_k8,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}53','${dataguid}54','${dataguid}55','${dataguid}56','${dataguid}57','${dataguid}58','${dataguid}59','${dataguid}60') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--从数据库获取历史（最近72个小时）的微波辐射计基础数据V的8个通道亮温值数据 -->
+	<select id="queryTdlwforV" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_61' then datavalue  end)as jc_v1,
+		 max(case when dataguid like '%_62' then datavalue  end)as jc_v2,
+		 max(case when dataguid like '%_63' then datavalue  end)as jc_v3,
+		 max(case when dataguid like '%_64' then datavalue  end)as jc_v4,
+		 max(case when dataguid like '%_65' then datavalue  end)as jc_v5,
+		 max(case when dataguid like '%_66' then datavalue  end)as jc_v6,
+		 max(case when dataguid like '%_67' then datavalue  end)as jc_v7,
+		 max(case when dataguid like '%_68' then datavalue  end)as jc_v8,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}61','${dataguid}62','${dataguid}63','${dataguid}64','${dataguid}65','${dataguid}66','${dataguid}67','${dataguid}68') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	
+	
+	<!--从数据库获取微波辐射计通道亮温的云底高度和降雨状态数据 -->
+	<select id="queryTdlwOtherdata" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_45' then datavalue  end)as jc_jyzt,
+		 max(case when dataguid like '%_71' then datavalue  end)as fy_ydgd,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,   
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}45','${dataguid}71','${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	
+	<!--微波辐射监测-其他廓线实时数据-->
+	<select id="wbOtherKx" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_69' then datavalue  end)as fy_sqzhl,
+		 max(case when dataguid like '%_70' then datavalue  end)as fy_ljytszhl,
+		 max(case when dataguid like '%_72' then datavalue  end)as fy_hwlw,   
+		 max(case when dataguid like '%_46' then datavalue  end)as jc_dmwd,       
+		 max(case when dataguid like '%_47' then datavalue  end)as jc_dmsd,     
+		 max(case when dataguid like '%_48' then datavalue  end)as jc_dmyq,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}69','${dataguid}70','${dataguid}72','${dataguid}46','${dataguid}47','${dataguid}48'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!--查询水平风速，垂直风速，水平方向  -->
+	<select id="reWriteFKXfile" resultType="map"  parameterType="map">
+		select max(case when dataguid like '%_168' then datavalue  end)as spfx,
+		 max(case when dataguid like '%_169' then datavalue  end)as spfs,
+		 max(case when dataguid like '%_170' then datavalue  end)as czfs,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}168','${dataguid}169','${dataguid}170') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime 
+	</select>
+	
+	<!--根据collecttime和dataguid查询地面压强  -->
+	<select id="queryDmyqBytime" resultType="java.lang.String"  parameterType="map">
+		select datavalue from cp_collect_actual where dataguid = '12_2780_7786269_48' 
+		<if test="collecttime != null and collecttime != '' ">
+		  and collecttime= #{collecttime}::timestamp
+		</if>
+	</select>
+	
+	
+	<!--返回数据库里已有的6分钟内离参数最近的时间 -->
+	<select id="queryMaxTimeByTime" resultType="java.lang.String"  parameterType="map">
+		select distinct to_char(cp_collect_actual_${objid}.collecttime,'yyyy-MM-dd HH24:MI:ss')collecttime from cp_collect_actual_${objid} 
+		where dataguid in (
+			select dataguid from cp_connect_objparam conn,cp_info_obj obj where
+			conn.objid = obj.objid
+			and devicenumber in (select devicenumber from cp_info_device where devicetypeid in (${devicetypeid}))
+			<if test="paramid != null and paramid != ''">
+				and conn.paramid in (${paramid})
+			</if>
+			<if test="objtypeid != null and objtypeid != ''">
+				and obj.objtypeid in (${objtypeid})
+			</if>
+			<if test="objid != null and objid != ''">
+				and conn.objid in (${objid})
+			</if>
+		)and  date_trunc('minute',cp_collect_actual_${objid}.collecttime)>=date_trunc('minute',#{endtime}::timestamp - interval '6 minutes')
+		and  date_trunc('minute',cp_collect_actual_${objid}.collecttime)&lt;= date_trunc('minute',#{endtime} ::timestamp)
+		order by collecttime desc limit 1
+	</select>
+	
+	
+	
+	<!-- 一张图-获取对象基本信息列表 -->
+	<select id="getfsjInfoList" parameterType="map" resultType="wy.util.datapersistence.ModelAssist">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from 
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		<!-- objtypeid:对象类型id,必传 -->
+		and b.tableid = c.tableid and c.objtypeid in (${objtypeid})
+		
+		<!-- 通过城市获取站点 -->
+		<if test="city != null and city != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where fieldid in (12010004) and ltrim(rtrim(fieldvalue)) in (${city})
+			) 
+		</if> 
+
+		<!-- 通过objid获取站点 -->
+		<if test="objid != null and objid != ''">
+			and a.objid in(${objid}) 
+		</if> 
+		
+		order by objid ,fieldid
+	</select>
+	
+	
+	<!-- 一张图-获取对象基本信息列表 -->
+	<select id="getfkxInfoList" parameterType="map" resultType="wy.util.datapersistence.ModelAssist">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from 
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		<!-- objtypeid:对象类型id,必传 -->
+		and b.tableid = c.tableid and c.objtypeid in (${objtypeid})
+		
+		<!-- 通过城市获取站点 -->
+		<if test="city != null and city != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where fieldid in (28010009) and ltrim(rtrim(fieldvalue)) in (${city})
+			) 
+		</if> 
+
+		<!-- 通过objid获取站点 -->
+		<if test="objid != null and objid != ''">
+			and a.objid in(${objid}) 
+		</if> 
+		
+		
+		order by objid  ,fieldid
+	</select>
+	
+	<!--根据时间和dataguid查稳定度系数  -->
+	<select id="queryWDDinfo" resultType="map"  parameterType="map">
+	 select 全指数TTI,抬升指数Li,沙氏指数Si,K指数Ki,边界层高度BLH 
+		 from 
+		   (select max(case when dataguid like('%_77') then datavalue end) 全指数TTI,
+	       max(case when dataguid like('%_78') then datavalue end)抬升指数Li,
+	       max(case when dataguid like('%_79') then datavalue end)沙氏指数Si,
+	       max(case when dataguid like('%_76') then datavalue end)K指数Ki,
+	       max(case when dataguid like('%_83') then datavalue end)边界层高度BLH,
+	       collecttime from
+	     (select * from cp_collect_actual_${objid} 
+	     where dataguid in('${dataguid}77','${dataguid}78','${dataguid}79',
+	     '${dataguid}76','${dataguid}83'))temp group by collecttime )temp2 
+     where date_trunc('minute', collecttime) = date_trunc('minute', #{endtime}::timestamp) 
+     limit 1
+	</select>
+	
+	
+	
+	
+	<!--根据objid查辐射计站点区站编号 -->
+	<select id="queryQzbhByobjid" resultType="java.lang.String"  parameterType="map">
+		select fieldvalue from cp_attach_infostore where fieldid='12010001' 
+		and objid=${objid}
+		limit 1
+	</select>
+	
+	
+	<!--根据objid查风廓线站点区站编号 -->
+	<select id="queryFkxQzbhByobjid" resultType="java.lang.String"  parameterType="map">
+		select fieldvalue from cp_attach_infostore where fieldid='28010003' 
+		and objid=${objid}
+		limit 1
+	</select>
+	
+	<!--查找Z0和Z-20 0度与-20度温度对应的高度 -->
+	<select id="queryAboutZ" resultType="map"  parameterType="map">
+		select datavalue from cp_collect_actual_${objid} where dataguid in('${dataguid}87')
+        and date_trunc('minute', collecttime) = date_trunc('minute', #{endtime}::timestamp) 
+        limit 1
+	</select>
+	
+	<!--根据辐射计objid查对应站点的风廓线的objid  -->
+	<select id="queryFkxOidhByFsjOid" resultType="java.lang.String"  parameterType="map">
+		select objid from cp_attach_infostore where fieldvalue =(select fieldvalue from cp_attach_infostore where fieldid='12010001' 
+		and objid=${objid}
+		limit 1) and objid!=${objid} and fieldid='28010003'
+	</select>
+	
+	
+	
+	<!--根据风廓线objid查对应站点的辐射计的objid  -->
+	<select id="queryFsjOidhByFkxOid" resultType="java.lang.String"  parameterType="map">
+		select objid from cp_attach_infostore where fieldvalue =(select fieldvalue from cp_attach_infostore where fieldid='28010003' 
+		and objid=${objid}
+		limit 1) and objid!=${objid} and fieldid='12010001'
+	</select>
+	
+	
+	<!--风廓线-所有站点规定高度下各个时间的风速，风向信息  new -->
+	<!-- <select id="getFkxAllSitesInfo" resultType="map"  parameterType="map">
+		select * from(select max(case when dataguid like '%_168' then datavalue  end)as spfx,
+		 max(case when dataguid like '%_169' then datavalue  end)as spfs,
+		 max(case when dataguid like '%_170' then datavalue  end)as czfs,
+		 objid,
+		collecttime from
+		(select dataid,dataguid,datavalue, substring(dataguid,4,4)as objid,collecttime
+		from cp_collect_actual 
+		where dataguid 
+		in(select distinct dataguid from cp_collect_actual where dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170')
+                
+		)temp 
+		group by collecttime,objid
+		order by collecttime desc)temp2
+		where date_trunc('minute',collecttime)=date_trunc('minute',#{collecttime}::timestamp)
+	</select> -->
+	
+	
+	<!--风廓线-所有站点规定高度下各个时间的风速，风向信息  new 优化版-->
+	<select id="getFkxAllSitesInfo" resultType="map"  parameterType="map">
+		select * from(select max(case when dataguid like '%_168' then datavalue  end)as spfx,
+		 max(case when dataguid like '%_169' then datavalue  end)as spfs,
+		 max(case when dataguid like '%_170' then datavalue  end)as czfs,
+		 objid,
+		collecttime from
+		(select dataid,dataguid,datavalue, split_part(dataguid,'_',2) as objid,collecttime
+		from cp_collect_actual 
+		where dataguid 
+		in(${dataguids})
+                
+		)temp 
+		group by collecttime,objid
+		order by collecttime desc)temp2
+		where date_trunc('minute',collecttime)=date_trunc('minute',#{collecttime}::timestamp)
+	</select>
+	
+	
+	
+	<!--辐射计-所有站点规定高度下各个时间的温度，湿度   new -->
+	<!-- <select id="getfsjAllSitesInfo" resultType="map"  parameterType="map">
+		select wdkx,sdkx,objid,collecttime from(select max(case when dataguid like '%_87' then datavalue  end)as wdkx,
+		 max(case when dataguid like '%_88' then datavalue  end)as sdkx,
+		 objid,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime, 
+		 substring(dataguid,4,4)as objid
+		from cp_collect_actual 
+		where dataguid in(select distinct dataguid from cp_collect_actual where dataguid like'12_%_87' or dataguid like'12_%_88')
+		
+		)temp 
+		group by collecttime,objid
+		order by collecttime desc )temp2
+		where date_trunc('minute',collecttime)&lt;=date_trunc('minute',#{collecttime}::timestamp)
+		limit 100
+	</select> -->
+	
+	<!--辐射计-所有站点规定高度下各个时间的温度，湿度  优化版new -->
+	<!-- <select id="getfsjAllSitesInfo" resultType="map"  parameterType="map">
+		select wdkx,sdkx,objid,collecttime from(select max(case when dataguid like '%_87' then datavalue  end)as wdkx,
+		 max(case when dataguid like '%_88' then datavalue  end)as sdkx,
+		 objid,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime, 
+		 substring(dataguid,4,4)as objid
+		from cp_collect_actual 
+		where dataguid in(${dataguids})
+		
+		)temp 
+		group by collecttime,objid
+		order by collecttime desc )temp2
+		where date_trunc('minute',collecttime)&lt;=date_trunc('minute',#{collecttime}::timestamp)
+		limit 100
+	</select> -->
+	
+	
+	<!--辐射计-所有站点规定高度下各个时间的温度，湿度  分表版new -->
+	<select id="getfsjAllSitesInfo" resultType="map"  parameterType="map">
+		<foreach collection="list" item="id" separator="UNION">
+		  (select wdkx,sdkx,objid,collecttime from(
+			 select max(case when dataguid like '%_87' then datavalue  end)as wdkx,
+			 max(case when dataguid like '%_88' then datavalue  end)as sdkx,
+			 objid,
+			 collecttime from
+				(select dataid,dataguid,datavalue,collecttime, 
+				 split_part(dataguid,'_',2)as objid
+				from cp_collect_actual_${id} 
+				where dataguid  like '12_%_87' or dataguid like '12_%_88'
+	 			
+				)temp 
+			group by collecttime,objid
+			order by collecttime desc )temp2
+			where date_trunc('minute',collecttime)&lt;=date_trunc('minute',#{collecttime}::timestamp)
+			limit 1)
+		
+		</foreach>
+	</select>
+	
+	
+	
+	<!--风廓线，最新俩个小时的时刻列表，湿度 new -->
+	<!-- <select id="getFkxNearHours" resultType="string"  parameterType="map">
+		select distinct date_trunc('minute',collecttime)collecttime
+		from cp_collect_actual 
+		where dataguid 
+		in(select distinct dataguid from cp_collect_actual where
+		 dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170')
+		 and date_trunc('minute',collecttime)&lt;=
+		 (select collecttime
+		    from cp_collect_actual 
+		    where dataguid 
+		    in(select distinct dataguid from cp_collect_actual where dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170')
+                    order by collecttime desc
+                    limit 1)
+		 and date_trunc('minute',collecttime)>=
+		    ( select ( select collecttime
+		     from cp_collect_actual 
+		     where dataguid 
+		     in(select distinct dataguid from cp_collect_actual where dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170')
+                     order by collecttime desc
+                     limit 1) - interval '2 hours')
+                     order by collecttime desc
+	</select> -->
+	
+	
+	<!--风廓线，最新俩个小时的时刻列表，湿度 new 优化版 -->
+	<!-- <select id="getFkxNearHours" resultType="string"  parameterType="map">
+		select distinct date_trunc('minute',collecttime)collecttime
+		from cp_collect_actual
+		where 
+		date_trunc('minute',collecttime)&lt;=  
+		 (select collecttime as etime
+		    from cp_collect_actual where
+		 dataguid in(${dataguids}
+		            ) order by collecttime desc
+                    limit 1 )
+		 
+		 and
+		 date_trunc('minute',collecttime)>=   (select  (select collecttime  
+		    from cp_collect_actual where
+		 dataguid in(${dataguids}
+		            ) order by collecttime desc
+                    limit 1  )- interval '2 hours'as time)
+
+          and  dataguid in(${dataguids} ) 
+         
+          order by collecttime desc
+
+	</select> -->
+	
+	
+	<!--风廓线，最新俩个小时的时刻列表，分表版-->
+	<select id="getFkxNearHours" resultType="string"  parameterType="map">
+	
+			<foreach collection="list"  item="id" separator="UNION">
+				(select distinct date_trunc('minute',collecttime)collecttime
+				from cp_collect_actual_${id}
+				where 
+				date_trunc('minute',collecttime)&lt;=  
+				 (select collecttime as etime
+				    from cp_collect_actual_${id} where
+				    dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170'
+				             order by collecttime desc
+		                    limit 1 )
+				 
+				 and
+				 date_trunc('minute',collecttime)>=   (select  (select collecttime  
+				    from cp_collect_actual_${id} where
+				    dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170'
+				             order by collecttime desc
+		                    limit 1  )- interval '2 hours'as time)
+		
+		          and  split_part(dataguid,'_',1)='28'
+		            )
+			
+			</foreach>
+	             
+           order by collecttime desc 
+
+	</select>
+	
+	<!--查询辐射计所有站点obj new  -->
+	<select id="getAllfsjObjids"  resultType="string">
+	   select distinct split_part(dataguid,'_',2) as objid from cp_collect_actual where dataguid like '12_%'
+	</select>
+	
+	<!-- 查询时间戳表是否有该站点的数据 -->
+	<select id="querySiteTimestamp" resultType="map" parameterType="map">
+	  select * from site_timestamp where objid=${objid} order by collecttime desc limit 1
+	</select>
+	
+	<!-- 插入一条该站点最新时间的时间戳 -->
+	<insert id="addSiteTimestamp" parameterType="map">
+	insert into site_timestamp(id,collecttime,objid) values(nextval('site_timestamp_id_seq'),#{maxTime}::timestamp,${objid})
+	</insert>
+	
+	<!-- 更新该站点最新时间的时间戳 -->
+	<update id="updateSiteTimestamp" parameterType="map">
+	 update  site_timestamp set collecttime =#{maxTime}::timestamp where id=${id}
+	</update>
+	
+	<!-- 查询辐射计某站点最新时间 -->
+	<select id="getFsjMaxTime"  parameterType="map" resultType="string">
+	  select collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87','${dataguid}88','${dataguid}89','${dataguid}90','${dataguid}91'
+		,'${dataguid}49','${dataguid}50') 
+		order by collecttime desc 
+		limit 1
+	</select>
+	
+	
+	<!-- 查询风廓线某站点最新时间 -->
+	<select id="getFkxMaxTime"  parameterType="map" resultType="string">
+	  select collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87','${dataguid}168','${dataguid}169','${dataguid}170','${dataguid}171'
+		,'${dataguid}172','${dataguid}173') 
+		order by collecttime desc 
+		limit 1
+	</select>
+	
+	
+	<!-- 查询辐射计站点设备的状态 -->
+	<select id="getfsjZtList" parameterType="map" resultType="map">
+	  <!--  select objid,collecttime,
+         max(case when thrtype in('GPS') then value else '0' end) gps,
+         max(case when thrtype in('温控') then value else '0' end) wk,
+         max(case when thrtype in('上位机存储') then value else '0' end) swjcc,
+         max(case when thrtype in('下位机存储') then value else '0' end) xwjcc,
+         max(case when thrtype in('上下位机网络通讯') then value else '0' end) wltx,
+         max(case when thrtype in('CAN通讯') then value else '0' end) cantx,
+         max(case when thrtype in('设备供电') then value else '0'end) sbgd
+      from(select objid,collecttime,value,thrtype from cp_info_threshold order by collecttime desc limit 100)t
+      group by objid,collecttime,value -->
+      
+             select                
+             max(case when dataguid like '%_221' then datavalue  end)as jsbz,
+			 max(case when dataguid like '%_235' then datavalue  end)as wltx,
+			 max(case when dataguid like '%_230' then datavalue  end)as jycg,
+			 max(case when dataguid like '%_222' then datavalue  end)as njdb,
+			 max(case when dataguid like '%_215' then datavalue  end)as sqgc,
+			 max(case when dataguid like '%_216' then datavalue  end)as wdgc,
+			 max(case when dataguid like '%_213' then datavalue  end)as fyzt,
+			 max(case when dataguid like '%_214' then datavalue  end)as fwzt,
+			 max(case when dataguid like '%_234' then datavalue  end)as gdzt,
+			 max(case when dataguid like '%_212' then datavalue  end)as zzt,
+			 objid,
+			 collecttime from
+				(select dataid,dataguid,datavalue,collecttime, 
+				 split_part(dataguid,'_',2)as objid
+				from cp_collect_actual_${objid}
+				where dataguid  like '12_%_221' or dataguid like '12_%_235'
+				or dataguid like '12_%_230' or dataguid like '12_%_222'
+				or dataguid like '12_%_215' or dataguid like '12_%_216'
+				or dataguid like '12_%_213' or dataguid like '12_%_214'
+				or dataguid like '12_%_234' or dataguid like '12_%_212' 
+
+	 			and collecttime = (select max(collecttime) from cp_collect_actual_${objid})
+				)temp 
+			group by collecttime,objid
+	
+	</select>
+	
+	
+	<!--从数据库里查询微波辐射计的实时(按分钟匹配)温度廓线数据  -->
+	<select id="querySsWeiBowdDate" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_87' then datavalue  end)as kx_wdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87'
+		,'${dataguid}49','${dataguid}50') 
+		<!-- <if test="endtime != null and endtime != '' ">
+		   and date_trunc('minute',collecttime)= date_trunc('minute', #{endtime}::timestamp)
+		</if> -->
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	<!--从数据库里查询微波辐射计的实时(按分钟匹配)相对湿度廓线数据  -->
+	<select id="querySsWeiBosdDate" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_88' then datavalue  end)as kx_xdsdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}88'
+		,'${dataguid}49','${dataguid}50') 
+		<!-- <if test="endtime != null and endtime != '' ">
+		   and date_trunc('minute',collecttime)= date_trunc('minute', #{endtime}::timestamp)
+		</if> -->
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	<!--从数据库里查询微波辐射计的实时(按分钟匹配)湿气密度廓线数据  -->
+	<select id="querySsWeiBosqmdDate" resultType="map"  parameterType="map">
+		 select
+		 max(case when dataguid like '%_89' then datavalue  end)as kx_sqmdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}89'
+		,'${dataguid}49','${dataguid}50') 
+		<!-- <if test="endtime != null and endtime != '' ">
+		   and date_trunc('minute',collecttime)= date_trunc('minute', #{endtime}::timestamp)
+		</if> -->
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	<!--从数据库里查询微波辐射计的实时(按分钟匹配)折射率廓线数据  -->
+	<select id="querySsWeiBozslDate" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_90' then datavalue  end)as kx_zslkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}90'
+		,'${dataguid}49','${dataguid}50') 
+		<!-- <if test="endtime != null and endtime != '' ">
+		   and date_trunc('minute',collecttime)= date_trunc('minute', #{endtime}::timestamp)
+		</if> -->
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	
+	<!--从数据库里查询微波辐射计的实时(按分钟匹配)边界层温度廓线数据  -->
+	<select id="querySsWeiBobjcDate" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_91' then datavalue  end)as kx_bjcwdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}91'
+		,'${dataguid}49','${dataguid}50') 
+		<!-- <if test="endtime != null and endtime != '' ">
+		   and date_trunc('minute',collecttime)= date_trunc('minute', #{endtime}::timestamp)
+		</if> -->
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	
+	<!--从数据库里查询微波辐射计的历史数据  温度二维分布数据-->
+	<select id="queryWeiBoWdDate" resultType="map"  parameterType="map">
+		  select max(case when dataguid like '%_87' then datavalue  end)as kx_wdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>	
+	
+	
+	<!--从数据库里查询微波辐射计的历史数据  湿度二维分布数据-->
+	<select id="queryWeiBoSdDate" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_88' then datavalue  end)as kx_xdsdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}88'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--从数据库里查询微波辐射计的历史数据  湿气密度二维分布数据-->
+	<select id="queryWeiBoSqmdDate" resultType="map"  parameterType="map">
+		  select 
+		 max(case when dataguid like '%_89' then datavalue  end)as kx_sqmdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}89'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--从数据库里查询微波辐射计的历史数据  折射率二维分布数据-->
+	<select id="queryWeiBoZslDate" resultType="map"  parameterType="map">
+		  select 
+		 max(case when dataguid like '%_90' then datavalue  end)as kx_zslkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}87','${dataguid}88','${dataguid}89','${dataguid}90','${dataguid}91'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--从数据库里查询微波辐射计的历史数据  边界层二维分布数据-->
+	<select id="queryWeiBoBjcDate" resultType="map"  parameterType="map">
+		  select 
+		 max(case when dataguid like '%_91' then datavalue  end)as kx_bjcwdkx,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}91'
+		,'${dataguid}49','${dataguid}50') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!-- 查询所有辐射计站点 -->
+	<select id="findAllFsj" resultType="map" parameterType="map" >
+	  select * from cp_info_obj where objtypeid=12
+	  <if test="objid != null and objid != '' ">
+		  and objid = ${objid}
+	  </if>
+	  order by objid desc
+	</select>
+	
+	<!-- 查询所有风廓线站点 -->
+	<select id="findAllFkx" resultType="map" parameterType="map" >
+	 select * from cp_info_obj where objtypeid=28
+	  <if test="objid != null and objid != '' ">
+		  and objid = ${objid}
+	  </if>
+	  order by objid desc
+	</select>
+	
+	
+	<!-- 查找所有去重后的风廓线站点dataguid(spfx,spfs,czfs) -->
+	<select id="getAllfkxDataguids"  parameterType="map" resultType="string">
+	 <foreach collection="list" item="id"  separator="UNION">
+	    select distinct dataguid from cp_collect_actual_${id} where dataguid like'28_%_168' or dataguid like'28_%_169' or dataguid like'28_%_170'
+	  </foreach>
+	</select>
+	
+	
+	<!-- 查找所有去重后的辐射计站点dataguid(wd,sd) -->
+	<select id="getAllfsjDataguids"  parameterType="map" resultType="string">
+	   <foreach collection="list" item="id"  separator="UNION">
+	     select distinct dataguid from cp_collect_actual_${id} where dataguid like'12_%_87' or dataguid like'12_%_88'
+	   </foreach>
+	  
+	</select>
+	
+	
+	
+	<!--对比分析-其他廓线实时数据之红外亮温-->
+	<select id="wbOtherKxHwlw" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_72' then datavalue  end)as fy_hwlw,   
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}72'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!--对比分析-其他廓线实时数据之液态水-->
+	<select id="wbOtherKxYts" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_70' then datavalue  end)as fy_ljytszhl,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid}
+		where dataguid 
+		in('${dataguid}70'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!--对比分析-其他廓线实时数据之水汽总含量-->
+	<select id="wbOtherKxSqzhl" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_69' then datavalue  end)as fy_sqzhl,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}69'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--对比分析-其他廓线实时数据之地面温度-->
+	<select id="wbOtherKxDmwd" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_46' then datavalue  end)as jc_dmwd,       
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}46'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--对比分析-其他廓线实时数据之地面湿度-->
+	<select id="wbOtherKxDmsd" resultType="map"  parameterType="map">
+		 select 
+		 max(case when dataguid like '%_47' then datavalue  end)as jc_dmsd,     
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}47'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--对比分析-其他廓线实时数据之地面压强-->
+	<select id="wbOtherKxDmyq" resultType="map"  parameterType="map">
+		 select  
+		 max(case when dataguid like '%_48' then datavalue  end)as jc_dmyq,
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}48'
+		,'${dataguid}49','${dataguid}50') 
+		
+		)temp 
+		<where>
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		</where>
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!--从数据库里查询风廓线雷达对比分析的水平风速的数据  -->
+	<select id="queryDbfxWpSpfs" resultType="map"  parameterType="map">
+		select 
+		 max(case when dataguid like '%_169' then datavalue  end)as spfs,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}169') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!--从数据库里查询风廓线雷达对比分析的垂直风速的数据  -->
+	<select id="queryDbfxWpCzfs" resultType="map"  parameterType="map">
+		select 
+		 max(case when dataguid like '%_170' then datavalue  end)as czfs,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}170') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	
+	<!--风廓线雷达对比分析的水平风速廓线的数据-->
+	<select id="queryDbfxKxWpSpfs" resultType="map"  parameterType="map">
+		select 
+		 max(case when dataguid like '%_169' then datavalue  end)as spfs,
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}169') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	
+	<!--风廓线雷达对比分析的水平风向廓线的数据-->
+	<select id="queryDbfxKxWpSpfx" resultType="map"  parameterType="map">
+		select max(case when dataguid like '%_168' then datavalue  end)as spfx,   
+		 
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}168') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	
+	<!--风廓线雷达对比分析的垂直风速廓线的数据-->
+	<select id="queryDbfxKxWpCzfs" resultType="map"  parameterType="map">
+		select 
+		 max(case when dataguid like '%_170' then datavalue  end)as czfs,
+		
+		collecttime from
+		(select dataid,dataguid,datavalue,collecttime 
+		from cp_collect_actual_${objid} 
+		where dataguid 
+		in('${dataguid}170') 
+		<if test="begintime != null and begintime != '' ">
+		  and collecttime>= #{begintime}::timestamp
+		</if>
+		<if test="endtime != null and endtime != '' ">
+		  and collecttime &lt;= #{endtime}::timestamp
+		</if>
+		)temp 
+		group by collecttime
+		order by collecttime desc
+		limit 1
+	</select>
+	
+	
+	
+	
+	<!--从数据库里查询微波辐射计的历史数据 只查询温度和湿度  -->
+	<select id="queryFuseWdSd" resultType="map"  parameterType="map">
+		 select max(case when dataguid like '%_87' then datavalue  end)as kx_wdkx,
+		 max(case when dataguid like '%_88' then datavalue  end)as kx_xdsdkx,
+		 
+		 max(case when dataguid like '%_49' then datavalue  end)as jc_fwjd,
+		 max(case when dataguid like '%_50' then datavalue  end)as jc_fyjd,
+		 collecttime from
+			(select dataid,dataguid,datavalue,collecttime 
+			from cp_collect_actual_${objid} 
+			where dataguid 
+			in('${dataguid}87','${dataguid}88'
+			,'${dataguid}49','${dataguid}50') 
+			<if test="begintime != null and begintime != '' ">
+			  and collecttime>= #{begintime}::timestamp
+			</if>
+			<if test="endtime != null and endtime != '' ">
+			  and collecttime &lt;= #{endtime}::timestamp
+			</if>
+			)temp 
+		group by collecttime
+		order by collecttime desc
+	</select>
+	
+	<!-- 测试查询改版辐射计设备查询 -->
+	<select id="queryFsjSb"  resultType="wy.qingdao_atmosphere.countrysitedata.domain.FsjFtpParam"  parameterType="map">
+	    select ftp.* from 
+			(select objid,
+			  max (case when fieldid = 28010001 then fieldvalue else '-' end ) as xianqu ,
+			  max (case when fieldid = 28010002 then fieldvalue else '-' end ) as province ,
+			  max (case when fieldid = 28010003 then fieldvalue else '-' end ) as sitenumber ,
+			  max (case when fieldid = 28010004 then fieldvalue else '-' end ) as xianqu ,
+			  max (case when fieldid = 28010005 then fieldvalue else '-' end ) as radartype ,
+			  max (case when fieldid = 28010006 then fieldvalue else '-' end ) as lon ,
+			  max (case when fieldid = 28010008 then fieldvalue else '-' end ) as lat ,
+			  max (case when fieldid = 28010007 then fieldvalue else '-' end ) as altitude ,
+			  max (case when fieldid = 28010009 then fieldvalue else '-' end ) as city 
+			  from
+			 (select distinct c.objid,c.objname,a.fieldid,a.fieldname,a.fieldshowname ,d.fieldvalue from cp_config_tableinfo a
+					left join cp_config_tableinfoadd b on a.tableid = b.tableid
+					left join cp_info_obj c on b.objtypeid = c.objtypeid
+					left join cp_attach_infostore d on a.fieldid=d.fieldid and d.objid=c.objid
+					where 1=1 and  a.isused = 1
+					 
+					order by objid desc) temp
+			group by objid) sub
+
+		inner join  cp_connect_objftp  ftp
+
+        on sub.objid = ftp.objid 
+        
+        where ftp.isused='1' and ftp.objtypeid=${objtypeid}
+	    
+	</select>
+	
+	
+	
+	
+	<!--查询其它数据库的配置信息  -->
+	<select id="queryOtherDataSource" resultType="wy.qingdao_atmosphere.countrysitedata.domain.DataSourceDo"  parameterType="map">
+		select id,datasource_name as dataSourceName,database_ip as databaseIp ,
+		database_port as databasePort,database_name as databaseName, 
+		database_username as databaseUsername,database_password  as password,
+		database_type as databaseType,isused as isused
+		from other_database
+		where isused=1
+			<if test="databaseType != null and databaseType != '' ">
+			 and database_type=#{databaseType}
+			</if>
+			<if test="id != null and id != '' ">
+			 and id=${id}
+			</if>
+			
+			<if test="databaseIp != null and databaseIp != '' ">
+			and database_ip=#{databaseIp}
+			</if>
+			<if test="databasePort != null and databasePort != '' ">
+			 and database_port=#{databasePort}
+			</if>
+			<if test="databaseName != null and databaseName != '' ">
+			 and database_name=#{databaseName}
+			</if>
+			
+	</select>
+	
+	
+	 <!-- 查询其他数据库的实时数据 -->
+	<select id="findOhterDbCollect" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.CollectParam">
+	
+	  select * from cp_collect_actual_${objid} 
+	  where split_part(dataguid,'_',2) = #{objid}
+	 <!--  and to_char(collecttime,'YYYY-MM-DD')='2020-01-10' -->
+	  <if test="dbMaxTime != null and dbMaxTime != '' ">
+	  <!-- and collecttime>#{dbMaxTime}::timestamp   and collecttime &lt;(#{dbMaxTime}::timestamp+interval '15 days') -->
+	  and collecttime>=(select min(collecttime) from cp_collect_actual_${objid} where collecttime>#{dbMaxTime}::timestamp)  
+	  and collecttime &lt;((select min(collecttime) from cp_collect_actual_${objid} where collecttime>#{dbMaxTime}::timestamp) +interval '15 days')
+	  </if>
+	   <if test="dbMaxTime == null or dbMaxTime == '' ">
+	  <!-- and collecttime>(now()::timestamp - interval '1 year') and collecttime &lt;((now()::timestamp - interval '1 year')+interval '15 days' ) -->
+	  and collecttime&lt;((select min(collecttime) from cp_collect_actual_${objid}) + interval '15 days')
+	  </if>
+	  order by collecttime desc
+	 
+	</select>
+	
+	
+	
+	<!-- 查询其他数据库的实时数据 -->
+	<!-- <select id="findOhterDbCollect" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.CollectParam">
+	
+	  select * from cp_collect_actual_${objid} 
+	  where split_part(dataguid,'_',2) = #{objid}
+	  and to_char(collecttime,'YYYY-MM-DD')='2020-01-10'
+	  <if test="dbMaxTime != null and dbMaxTime != '' ">
+	 
+	  order by collecttime asc
+	  limit 10
+	  </if>
+	   <if test="dbMaxTime = null or dbMaxTime = '' ">
+	 
+	  order by collecttime asc
+	  limit 20
+	  </if>
+	  
+	</select> -->
+	
+	<!--插入实时数据  -->
+	<insert id="insertCollect"  parameterType ="map">
+	  insert into cp_collect_actual_${objid}
+	  values
+	  <foreach item="item" collection="list" separator=","  close=";" index="index">
+			(nextval('cp_collect_actual_id_seq'),#{item.dataguid},#{item.datavalue},#{item.collecttime}::timestamp)
+		</foreach>
+	</insert>
+	
+	<!-- 根据objtype查找其它数据库的站点obj信息（规定只有单个设备-非平台） -->
+	<select id="selectOtherDbobjByOtp" parameterType="map"  resultType="wy.qingdao_atmosphere.countrysitedata.domain.CpinfoObj">
+	 select * from cp_info_obj where objtypeid = ${objtypeid} limit 1
+	</select>
+	
+	<!-- 根据objtype查找其它数据库的站点空间表信息（规定只有单个设备-非平台） -->
+	<select id="selectOtherDbSpaceByOtp" parameterType="map"  resultType="wy.qingdao_atmosphere.countrysitedata.domain.SpaceTable">
+	 select space.objid,space.id,ST_AsGeoJSON(shape) as shape from ${spaceTable} space
+	 left join cp_info_obj obj
+	 on space.objid = obj.objid
+	 where objtypeid = ${objtypeid} limit 1
+	</select>
+	
+	
+	
+	<!-- 根据objtype查找其它数据库的站点基本信息表信息（规定只有单个设备-非平台） -->
+	<select id="selectOtherDbAttachInfoByOtp" parameterType="map"  resultType="wy.qingdao_atmosphere.countrysitedata.domain.AttachInfoStore">
+	 select info.* from cp_attach_infostore info
+	 left join cp_info_obj obj
+	 on info.objid = obj.objid
+	 where objtypeid = ${objtypeid} 
+	</select>
+	
+	<!-- 根据objtype查找其它数据库的站点参数关联表表信息（规定只有单个设备-非平台） -->
+	<select id="selectOtherDbConnObjParamByOtp" parameterType="map"  resultType="wy.qingdao_atmosphere.countrysitedata.domain.ConnObjParam">
+	 select conn.* from cp_connect_objparam conn
+	 left join cp_info_obj obj
+	 on conn.objid = obj.objid
+	 where objtypeid = ${objtypeid} 
+	</select>
+	
+	
+	<!-- 对象管理  添加对象 -->
+	<insert id="addObjTwo" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.CpinfoObj">
+	   <selectKey keyProperty="objid" resultType="java.lang.Integer" order="AFTER">
+             select currval('cp_info_obj_id_seq') as objid
+         </selectKey>
+		insert into cp_info_obj(objid,objtypeid,objname,objnum,remark,isused)
+		values(nextval('cp_info_obj_id_seq'),${objtypeid},#{objname},'','',${isused});
+	</insert>
+	
+	
+	<!-- 添加空间表记录 -->  <!-- GeomFromEWKT('SRID=4326;POINT(${shape})') -->
+	<insert id="addZjSpaceInfo" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.SpaceTable">
+		insert into ${tablename}(objid,id,shape)
+		values(${objid},${id},ST_GeomFromText('POINT(${shape})', 4326 ));   
+	</insert>
+	
+	
+	<!-- 基本表添加数据 -->
+	<insert id="addCpAttachInfoStore" parameterType="java.util.List" useGeneratedKeys="true">
+		insert into cp_attach_infostore(infoid,objid,fieldid,fieldvalue)
+		values
+		<foreach collection="list" item="item" index="index"
+			separator=",">
+			(nextval('cp_attach_infostore_id_seq'),${item.objid},${item.fieldid},#{item.fieldvalue})
+		</foreach>
+	</insert>
+	
+	
+	<!-- 对象参数关联表添加数据 -->
+	<insert id="addConnObjParam" parameterType="java.util.List" useGeneratedKeys="true">
+		insert into cp_connect_objparam(connectid,objid,paramid,dataguid,isused,paramnumber,devicenumber)
+		values
+		<foreach collection="list" item="item" index="index"
+			separator=",">
+			(nextval('cp_connect_objparam_id_seq'),${item.objid},${item.paramid},#{item.dataguid},${item.isused},#{item.paramnumber},#{item.devicenumber})
+		</foreach>
+	</insert>
+	
+	<!-- 其它数据源的添加 -->
+	<insert id="addOtherDb" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.DataSourceDo" >
+	    <selectKey keyProperty="id" resultType="java.lang.Integer" order="AFTER">
+             select currval('other_database_id_seq') as id
+         </selectKey>
+		insert into other_database(id,datasource_name,database_ip,database_port,database_name,database_username,database_password,database_type,isused)
+		values
+		(nextval('other_database_id_seq'),#{dataSourceName},#{databaseIp},#{databasePort},
+		#{databaseName},#{databaseUsername},#{password},#{databaseType},1)
+		
+	</insert>
+	
+	<!-- 添加本地数据库与其他数据源的objid关联 -->
+	<insert id="addObjIdConnect" parameterType="map">
+	  insert into cp_database_connect_objid  
+	   values
+	   (nextval('cp_database_connect_objid_id_seq'),${objid},${otherobjid},#{dsname},${dsid},${objtypeid})
+	</insert>
+	
+	<!-- 新建实时数据监测表 -->
+	<update id="creatCollTable" parameterType="map">
+	 CREATE TABLE public.cp_collect_actual_${objid}
+		(
+		  dataid bigint NOT NULL,
+		  dataguid text,
+		  datavalue text,
+		  collecttime timestamp with time zone,
+		  CONSTRAINT cp_collect_actual_${objid}_pkey PRIMARY KEY (dataid)
+		)
+		WITH (
+		  OIDS=FALSE
+		);
+		ALTER TABLE public.cp_collect_actual_${objid}
+		OWNER TO postgres;
+	
+	</update>
+	
+	<!-- 根据objid查找其他数据源与本地数据库的objid的关联 -->
+	<select id="selectDbConnOid" parameterType ="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.DbConnOid">
+	select * from cp_database_connect_objid 
+	 <where>
+	   <if test="dsid != null and dsid != '' ">
+	    and  dsid = ${dsid}
+	   </if>
+	    <if test="objtypeid != null and objtypeid != '' ">
+	    and  objtypeid = ${objtypeid}
+	   </if>
+	    <if test="objid != null and objid != '' ">
+	    and  objid = ${objid}
+	   </if>
+	 </where> 
+	
+	</select>
+	
+	
+	
+	
+	
+	
+	<!-- 通过设备类型获取本地数据库其他数据源的设备的监测数据最新时间 -->
+	<select id="getMaxTimeByDtid_three" resultType="string" parameterType="map">
+		select to_char(max(cp_collect_actual_${objid}.collecttime),#{time_formt}) from cp_collect_actual_${objid} where dataguid  
+		in (select dataguid from cp_connect_objparam where 
+			devicenumber in (select devicenumber from cp_info_device where devicetypeid in (${devicetypeid}))
+			<if test="objid != null and objid != ''">
+				and objid in (${objid})
+			</if>
+		)
+	</select>
+	
+	
+	<!-- 查询设备数据来源的ftp服务器信息 -->
+	<select id ="getFtpInfo" parameterType="map"  resultType="map">
+	 select  * from cp_connect_objftp 
+	 <where>
+	 isshow='1'
+	  <if test="objid != null and objid != ''">
+	    and objid=${objid}
+	  </if>
+	  <if test="objtypeid != null and objtypeid != ''"  >
+	   and objtypeid=${objtypeid}
+	  </if>
+	  
+	   <if test="id != null and id != ''"  >
+	   and id=${id}
+	  </if>
+	 </where>
+	</select>
+	
+	<!-- 更新数据来源ftp服务器的信息 -->
+	<update id="updateFtpInfo" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.FsjFtpParam" >
+	   update cp_connect_objftp 
+	   <set> 
+		     <if test="ip != null and ip != ''">
+		      ip=#{ip},
+		     </if>
+		      <if test="port != null and port != ''">
+		      port=#{port},
+		     </if>
+		      <if test="username != null and username != ''">
+		      username=#{username},
+		     </if>
+		      <if test="password != null and password != ''">
+		      password=#{password},
+		     </if>
+		      <if test="sitenumber != null and sitenumber != ''">
+		     sitenumber=#{sitenumber},
+		     </if>
+		      <if test="filepath != null and filepath != ''">
+		      filepath=#{filepath},
+		     </if>
+		      <if test="isused != null and isused != ''">
+		     isused=#{isused},
+		     </if>
+	    </set>    
+		   where   id=${id}
+		 
+	                     
+	</update>
+	
+	
+	<delete id="delOtherDs" parameterType="java.lang.Integer">
+	
+	   delete from other_database where id =${_parameter}
+	   
+	</delete>
+	
+	
+	<delete id="dropCollTable" parameterType="java.lang.Integer">
+	
+	  drop table if exists  cp_collect_actual_${_parameter}
+	  
+	</delete>
+	
+	<delete id="deleteObj" parameterType="java.lang.Integer">
+	
+	   delete from cp_info_obj where objid =${_parameter}
+	   
+	</delete>
+	
+	
+	<delete id="deleteSpace" parameterType="map">
+	
+	   delete from ${tablename} where objid =${objid}
+	   
+	</delete>
+	
+	<delete id="deleteConnParam" parameterType="java.lang.Integer">
+	
+	   delete from cp_connect_objparam where objid =${_parameter}
+	   
+	</delete>
+	
+	<delete id="deleteInfoStore" parameterType="java.lang.Integer">
+	
+	   delete from cp_attach_infostore where objid =${_parameter}
+	   
+	</delete>
+	
+	
+	<delete id="delConnDbOid" parameterType="java.lang.Integer">
+	
+	   delete from cp_database_connect_objid where objid =${_parameter}
+	   
+	</delete>
+	
+	
+	
+	
+	<!-- 添加三级市级目录结构id --> 
+	<insert id="addThirdDir" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.CpDir"> 
+	<selectKey keyProperty="id" resultType="java.lang.Integer" order="AFTER">
+             select currval('cp_dir_control_dq_id_seq') as id
+         </selectKey>
+		insert into cp_dir_control_dq (id,lastlevel,dirname,dirlevel,higherlevelid,displayorder,isused,dirtypeid,dirtypename,isshow,fieldid) values(nextval('cp_dir_control_dq_id_seq'),1,#{dirname},3,${higherlevelid},(select max(displayorder)+1 from cp_dir_control_dq),1,1,'大气',1,#{fieldid})     
+	</insert>
+	
+	<!-- 根据市级名字查询是否有该3级目录 -->
+	<select id="findDirBycity"  parameterType="map"  resultType="map">
+	select * from cp_dir_control_dq where higherlevelid = ${higherlevelid} and dirname = #{dirname}  and isused=1  limit 1
+	
+	</select>
+	
+	
+	<!-- 查询该站点是设备还是平台端 -->
+	<select id="queryPlatform" parameterType="map"  resultType="map">  
+	 select * from cp_config_isplatform where isused = '1' limit 1
+	
+	</select>
+	
+	<!-- 通过id删除目录 -->
+	<delete id="delFsjDir" parameterType="java.lang.Integer">
+	
+	   delete from cp_dir_control_dq where id =${_parameter}
+	   
+	</delete>
+	
+	
+	<!-- 删除指定时间之前的监测数据 -->
+	<delete id="delCollData_two" parameterType="map">
+		delete from cp_collect_actual_${objid} 
+		where to_char(collecttime,'yyyy-MM-dd HH24:MI:ss') &lt; #{collecttime}
+		
+	</delete>
+	
+	
+	<!-- 添加web服务器信息 --> 
+	<insert id="addWebServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer">
+	<selectKey keyProperty="id" resultType="java.lang.Integer" order="AFTER">
+             select currval('cp_config_webserver_id_seq') as id
+         </selectKey> 
+		insert into cp_config_webserver (id,objid,ip,port,name,url) values(nextval('cp_config_webserver_id_seq'),${objid},#{ip},${port},#{name},#{url})     
+	</insert>
+	
+	
+	<!-- 添加fsj设备操作程序服务器信息 --> 
+	<insert id="addFsjServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer"> 
+		insert into cp_config_fsjserver (id,objid,ip,port) values(nextval('cp_config_fsjserver_id_seq'),${objid},#{ip},${port})     
+	</insert>
+	
+	
+	<!-- 更新辐射计服务器的信息 -->
+	<update id="updateFsjServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer" >
+	   update cp_config_fsjserver 
+	   <set> 
+		     <if test="ip != null and ip != ''">
+		      ip=#{ip},
+		     </if>
+		      <if test="port != null and port != ''">
+		      port=${port},
+		     </if>
+		      <if test="objid != null and objid != ''">
+		      objid=${objid},
+		     </if>
+		     
+	    </set>    
+		   where   id=${id}
+	</update>
+	
+	
+	<!-- 查询射计服务器的信息 -->
+	<select id="selectFsjServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer" resultType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer">
+	   select * from  cp_config_fsjserver 
+	   <where> 
+		     <if test="ip != null and ip != ''">
+		     and  ip=#{ip}
+		     </if>
+		      <if test="port != null and port != ''">
+		     and  port=${port}
+		     </if>
+		      <if test="objid != null and objid != ''">
+		     and  objid=${objid}
+		     </if>
+		      <if test="id != null and id != ''">
+		     and  id=${id}
+		     </if>
+		     
+	    </where>    
+		 
+	</select>
+	
+	
+	
+		<!-- 查询web服务器的信息 -->
+	<select id="selectWebServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer" resultType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer">
+	   select * from  cp_config_webserver 
+	   <where> 
+		     <if test="ip != null and ip != ''">
+		     and  ip=#{ip}
+		     </if>
+		      <if test="port != null and port != ''">
+		     and  port=${port}
+		     </if>
+		      <if test="objid != null and objid != ''">
+		     and  objid=${objid}
+		     </if>
+		      <if test="id != null and id != ''">
+		     and  id=${id}
+		     </if>
+		     
+		     <if test="name != null and name != ''">
+		     and  name=#{name}
+		     </if>
+		     
+		     <if test="url != null and url != ''">
+		      and  url=#{url}
+		     </if>
+		     
+	    </where>    
+		 
+	</select>
+	
+	<!-- 更新web服务器的信息 -->
+	<update id="updateWebServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer" >
+	   update cp_config_webserver 
+	   <set> 
+		     <if test="ip != null and ip != ''">
+		      ip=#{ip},
+		     </if>
+		      <if test="port != null and port != ''">
+		      port=${port},
+		     </if>
+		      <if test="objid != null and objid != ''">
+		      objid=${objid},
+		     </if>
+		     
+		     <if test="name != null and name != ''">
+		      name=#{name},
+		     </if>
+		     
+		     <if test="url != null and url != ''">
+		      url=#{url},
+		     </if>
+		     
+	    </set>    
+		   where   id=${id}
+	</update>
+	
+	
+	<!-- 查询其他数据源的信息 -->
+	<select id="selectOtherDb" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.DataSourceDo" resultType="wy.qingdao_atmosphere.countrysitedata.domain.DataSourceDo">
+	   select database_ip as databaseIp ,id,  database_name as  databaseName ,
+	   isused ,database_type as databaseType ,datasource_name as dataSourceName,
+	   database_port as  databasePort ,database_username as databaseUsername,
+	   database_password as password 
+	   from  other_database 
+	   <where> 
+		     <if test="databaseIp != null and databaseIp != ''">
+		     and  database_ip=#{databaseIp}
+		     </if>
+		      <if test="id != null and id != ''">
+		     and  id=${id}
+		     </if>
+		      <if test="databaseName != null and databaseName != ''">
+		     and  database_name=#{databaseName}
+		     </if>
+		      <if test="isused != null and isused != ''">
+		     and  isused=${isused}
+		     </if>
+		     
+		      <if test="databaseType != null and databaseType != ''">
+		     and  database_type=#{databaseType}
+		     </if>
+		     
+	    </where>    
+		 
+	</select>
+	
+	
+	<!-- 更新web服务器的信息 -->
+	<update id="updateOtherDb" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.DataSourceDo" >
+	   update other_database 
+	   <set> 
+		      <if test="databaseIp != null and databaseIp != ''">
+		      database_ip=#{databaseIp},
+		     </if>
+		     <if test="isused != null and isused != ''">
+		      isused=${isused},
+		     </if>
+		      <if test="databaseName != null and databaseName != ''">
+		       database_name=#{databaseName},
+		     </if>
+		     <if test="dataSourceName != null and dataSourceName != ''">
+		       datasource_name=#{dataSourceName},
+		     </if>
+		     <if test="databaseUsername != null and databaseUsername != ''">
+		       database_username=#{databaseUsername},
+		     </if>
+		     <if test="databasePort != null and databasePort != ''">
+		       database_port=#{databasePort},
+		     </if>
+		     
+		      <if test="password != null and password != ''">
+		       database_password=#{password},
+		     </if>
+		      <if test="databaseType != null and databaseType != ''">
+		       database_type=#{databaseType},
+		     </if>
+		     
+	    </set>    
+		   where   id=${id}
+	</update>
+	
+	
+	
+	<!-- 删除其他数据源相关操作-->
+	<delete id="deleteOtherDb" parameterType="java.lang.String">
+	
+	 delete from cp_info_obj where objid in (${_parameter}) ;
+	 
+	 delete from cp_connect_objparam where objid in (${_parameter}) ;
+	 
+	 delete from space_wbstation where objid in (${_parameter}) ;
+	 
+	 
+	 delete from space_windprofile where objid in (${_parameter});
+	 
+	 
+	 delete from cp_attach_infostore where objid in (${_parameter});
+	 
+	 delete from cp_database_connect_objid where objid in (${_parameter});
+	 
+	 delete from cp_config_webserver where objid in (${_parameter});
+	 
+	 
+	 delete from cp_config_webserver where objid in (${_parameter});
+	 
+	 
+	</delete>
+	
+	<!-- 根据objid查出设备基本信息 -->
+	<select id="selectAttachInfo"   parameterType="map"  resultType="wy.qingdao_atmosphere.countrysitedata.domain.AttachInfoStore">
+	 select * from cp_attach_infostore where objid = ${objid}
+	
+	</select>
+	
+	<!-- 通过objid和cityName查询是否还存在该市的设备-->
+	<select id="isHasOtherDeviceByCity"   parameterType="map"  resultType="map">
+		select obj.*
+		 from
+		(
+		select distinct objid from cp_attach_infostore where fieldid in (12010004,28010009)  and fieldvalue = #{cityName})info
+		
+		left join cp_info_obj  obj
+		
+		on info.objid = obj.objid
+		
+		where objtypeid = (select objtypeid from cp_info_obj where objid=${objid})
+		
+		and info.objid != ${objid}
+	
+	</select>
+	
+	
+	<!-- 根据市级名字删除3级目录 -->
+	<select id="deleteDirBycity"  parameterType="map"  >
+	delete from cp_dir_control_dq where higherlevelid = ${higherlevelid} and dirname = #{dirname}  and isused=1  
+	
+	</select>
+	
+	<delete id="deleteWebServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer">
+	
+	  delete from  cp_config_webserver  where  id = ${id}
+	  
+	</delete>
+	
+	<delete id="deleteFsjServer" parameterType="wy.qingdao_atmosphere.countrysitedata.domain.WebServer">
+	
+	  delete from  cp_config_fsjserver  where  id = ${id}
+	  
+	</delete>
+	
+	
+	<!-- 查询地图配置参数 -->
+	<select id="selectMapParam"   parameterType="map"  resultType="map">
+	 select * from cp_info_map_param limit 1
+	 <where>
+	   <if test="id != null and id != ''">
+		       id = ${id}
+	   </if>
+	
+	 </where> 
+	
+	</select>
+	
+	
+	<!-- 插入地图配置参数 -->
+	<insert id="insertMapParam"   parameterType="map"  >
+	 insert into   cp_info_map_param 
+	 values(nextval('cp_info_map_param_id'),#{lat},#{lon},#{level})
+	
+	</insert>
+	
+	
+	
+	<!-- 更新地图配置参数 -->
+	<update id="updateMapParam"   parameterType="map"  >
+	 update  cp_info_map_param 
+	  <set> 
+		     <if test="lat != null and lat != ''">
+		      lat=#{lat},
+		     </if>
+		     <if test="lon != null and lon != ''">
+		      lon=#{lon},
+		     </if>
+		      <if test="level != null and level != ''">
+		      level=#{level},
+		     </if>
+	  </set>
+	  
+	    <if test="id != null and id != ''">
+		   where   id=${id}
+		  </if>
+	
+	</update>
+	
+	
+	
+	
+	
+</mapper>

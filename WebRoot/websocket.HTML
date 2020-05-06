@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <head>
+        <meta name="viewport" content="width=device-width" />
+        <title>WebSocket 客户端</title>
+    </head>
+
+    <body>
+        <div>
+        	我的id:<input type="text" id="txtid" /><br/>
+            <input type="button" id="btnConnection" value="连接" />
+            <input type="button" id="btnClose" value="关闭" /> <br/>
+			收信人id:<input type="text" id="txtshou" /><br/>
+			信息:<input type="text" id="txt" />
+            <input type="button" id="btnSend" value="发送" />
+						<div id="txtdiv" style="width:100%;height:500px;border:1px solid black; overflow-y:auto; overflow-x:auto;"></div>
+        </div>
+       
+		<script src="http://libs.baidu.com/jquery/2.0.0/jquery.js"></script>
+        <script type="text/javascript">
+            var socket;
+            if(typeof(WebSocket) == "undefined") {
+                alert("您的浏览器不支持WebSocket");
+            }
+			document.getElementById("btnClose").disabled=true;
+            $("#btnConnection").click(function() {
+            	var userno=document.getElementById("txtid").innerHTML;
+                //实现化WebSocket对象，指定要连接的服务器地址与端口
+                socket = new WebSocket("ws://localhost:8085/websocket?openid="+userno);
+                //打开事件
+                socket.onopen = function() {
+					document.getElementById("btnConnection").disabled=true;
+					document.getElementById("btnClose").disabled=false;
+                    document.getElementById("txtdiv").innerHTML = "<font color='red'>你"+format(new Date(),"yyyy-MM-dd hh:mm:ss")+"：websocket成功连接！<br/></font>";
+                    //socket.send("这是来自客户端的消息" + location.href + new Date());
+                };
+                //获得消息事件
+                socket.onmessage = function(msg) {
+                    // alert(msg.data);
+					var html = document.getElementById("txtdiv").innerHTML;
+					document.getElementById("txtdiv").innerHTML =  html + "<font color='blue'>服务器"+format(new Date(),"yyyy-MM-dd hh:mm:ss")+"：</font>"+msg.data+"<br/>";
+                };
+                //关闭事件
+                socket.onclose = function() {
+                document.getElementById("btnConnection").disabled=false;
+                document.getElementById("btnClose").disabled=true;
+				var html = document.getElementById("txtdiv").innerHTML;
+				document.getElementById("txtdiv").innerHTML =  html + "<font color='red'>你"+format(new Date(),"yyyy-MM-dd hh:mm:ss")+"：服务关闭<br/></font>";
+                };
+                //发生了错误事件
+                socket.onerror = function() {
+                    alert("发生了错误");
+                }
+            });
+            
+            //发送消息
+            $("#btnSend").click(function() {
+				var a= $("#txt").val();
+				var b= $("#txtshou").val();
+				var html = document.getElementById("txtdiv").innerHTML;
+				document.getElementById("txtdiv").innerHTML =  html + "<font color='yellow'>你："+a+"<br/></font>";
+                socket.send(a+"|"+b);
+            });
+            
+            //关闭
+            $("#btnClose").click(function() {
+                socket.close();
+            });
+						
+						
+						function format(date,str){
+							var mat={};
+							mat.M=date.getMonth()+1;//月份记得加1
+							mat.H=date.getHours();
+							mat.s=date.getSeconds();
+							mat.m=date.getMinutes();
+							mat.Y=date.getFullYear();
+							mat.D=date.getDate();
+							mat.d=date.getDay();//星期几
+							mat.d=check(mat.d);
+							mat.H=check(mat.H);
+							mat.M=check(mat.M);
+							mat.D=check(mat.D);
+							mat.s=check(mat.s);
+							mat.m=check(mat.m);
+							console.log(typeof mat.D)
+							if(str.indexOf(":")>-1){
+					mat.Y=mat.Y.toString().substr(2,2);
+					return mat.Y+"/"+mat.M+"/"+mat.D+" "+mat.H+":"+mat.m+":"+mat.s;
+							}
+							if(str.indexOf("/")>-1){
+									return mat.Y+"/"+mat.M+"/"+mat.D+" "+mat.H+"/"+mat.m+"/"+mat.s;
+							}
+							if(str.indexOf("-")>-1){
+									return mat.Y+"-"+mat.M+"-"+mat.D+" "+mat.H+"-"+mat.m+"-"+mat.s;
+							}
+					}
+					//检查是不是两位数字，不足补全
+					function check(str){
+							str=str.toString();
+							if(str.length<2){
+									str='0'+ str;
+							}
+							return str;
+					}
+        </script>
+    </body>
+
+</html>

@@ -1,0 +1,317 @@
+package wy.util;
+
+import java.util.List;
+import cmcc.iot.onenet.javasdk.api.cmds.SendCmdsApi;
+import cmcc.iot.onenet.javasdk.response.BasicResponse;
+import cmcc.iot.onenet.javasdk.response.cmds.NewCmdsResponse;
+
+/**
+ * OneNet设备指令下发
+ * @author hero
+ *
+ */
+public class DeviceCMD {
+	
+	//6.2.2	CMC_S_TimeRcv
+	public void CMC_S_TimeRcv(int random,String dev_id,String key){
+		Long timeString  = System.currentTimeMillis();
+		int time = (int)(timeString/1000);
+//		String hex = Integer.toHexString(time);
+		byte[] buffer = new byte[11];
+		buffer[0] = (byte) (0xFF);
+	 	buffer[1] = (byte) (0x00);
+	 	buffer[2] = (byte) (0x07);
+	 	buffer[3] = (byte) (0xD1);
+	 	buffer[4] = (byte) (random >> 8 & 0xFF);
+	 	buffer[5] = (byte) (random & 0xFF);
+	 	buffer[6] = (byte) (time & 0xFF);
+	 	buffer[7] = (byte) (time >> 8 & 0xFF);
+	 	buffer[8] = (byte) (time >> 16 & 0xFF);
+	 	buffer[9] = (byte) (time >> 24 & 0xFF);
+	 	buffer[10] = (byte) (0x00);
+	 	SendCmdsApi api = new SendCmdsApi(dev_id, null, null, null, buffer, key);
+		BasicResponse<NewCmdsResponse> response = api.executeApi();
+		System.out.println("发送指令--"+response.getJson());
+	}
+	
+	//6.2.7	CMC_S_FileRcv  &&   6.2.8	CMC_S_TransFile
+	public void CMC_S_FileRcv(int random,String dev_id,String key,List<byte[]> bytelist) throws Exception{
+		int PacketNumber = bytelist.size();//总包数
+		byte[] buffer = new byte[12];
+		buffer[0] = (byte) (0xFF);
+	 	buffer[1] = (byte) (0x00);
+	 	buffer[2] = (byte) (0x08);
+	 	buffer[3] = (byte) (0xF1);
+	 	buffer[4] = (byte) (random >> 8 & 0xFF);
+	 	buffer[5] = (byte) (random & 0xFF);
+	 	buffer[6] = (byte) (0x01);
+	 	buffer[10] = (byte) (PacketNumber & 0xFF);
+	 	buffer[9] = (byte) (PacketNumber >> 8 & 0xFF);
+	 	buffer[8] = (byte) (PacketNumber >> 16 & 0xFF);
+	 	buffer[7] = (byte) (PacketNumber >> 24 & 0xFF);
+	 	buffer[11]= (byte) (0x00);
+	 	SendCmdsApi api = new SendCmdsApi(dev_id, null, null, null, buffer, key);
+		BasicResponse<NewCmdsResponse> response = api.executeApi();
+		System.out.println("发送指令--"+response.getJson());
+		Thread.sleep(1000);
+		try {
+			for (int i = 0; i < bytelist.size(); i++) {
+				byte[] byarry = bytelist.get(i);
+				System.out.println("包大小："+byarry.length+"包数："+i);
+				byte[] buf = new byte[byarry.length+16];
+				buf[0] = (byte) (0xFF);
+				buf[1] = (byte) (byarry.length+12 >> 8 & 0xFF);
+				buf[2] = (byte) (byarry.length+12 & 0xFF);
+				buf[3] = (byte) (0xF3);
+				buf[4] = (byte) (random >> 8 & 0xFF);
+				buf[5] = (byte) (random & 0xFF);
+				buf[6] = (byte) (0x01);
+				//文件包总数
+				buf[7] = (byte) (PacketNumber >> 24 & 0xFF);
+				buf[8] = (byte) (PacketNumber >> 16 & 0xFF);
+				buf[9] = (byte) (PacketNumber >> 8 & 0xFF);
+				buf[10]= (byte) (PacketNumber & 0xFF);
+				buf[11]= (byte) (i+1 >> 24 & 0xFF);
+				buf[12]= (byte) (i+1 >> 16 & 0xFF);
+				buf[13]= (byte) (i+1 >> 8 & 0xFF);
+				buf[14]= (byte) (i+1 & 0xFF);
+				int aa = 15;
+				for(int s=0;s<byarry.length;s++){
+					buf[aa++] = byarry[s];
+				}
+				buf[byarry.length+15]= (byte) (0x00);
+				//发送命令
+	    		SendCmdsApi api2 = new SendCmdsApi(dev_id, null, null, null, buf, key);
+	    		BasicResponse<NewCmdsResponse> response2 = api2.executeApi();
+	    		System.out.println("文件发送指令--"+response2.getJson());
+	    		Thread.sleep(1000);
+			}
+			
+		} catch (Exception e) {
+			e.printStackTrace();   
+		}
+	}
+	
+	/**
+	 * 
+	 * @param random  随机数序列号
+	 *        dev_id  设备id
+	 *        key     产品key
+	 * @param zdh	    站点号
+	 * @param timejg  时间间隔
+	 * @param cpid	    产品id
+	 * @param jiaoben 脚本名称
+	 * @param ip      ip地址
+	 * @param port    端口号
+	 */
+	//6.2.5	CMC_S_SetParms
+	public void CMC_S_SetParms(int random,String dev_id,String key,String zdh,int timejg,int cpid,String jiaoben,String ip,int port){
+		byte[] buffer = new byte[38];
+		buffer[0] = (byte) (0xFF);
+		buffer[1] = (byte) (0x00);
+		buffer[2] = (byte) (34 & 0xFF);
+		
+		buffer[3] = (byte) (0xD4);
+		//序列号
+		buffer[4] = (byte) (random >> 8 & 0xFF);
+		buffer[5] = (byte) (random & 0xFF);
+		//站点号
+//		String zdh = "00001";
+		for (int i = 0; i < (10-zdh.length()); i++) {
+			buffer[6+i] = (byte) (0x00);
+		}
+		for (int i = 0; i < zdh.length(); i++) {
+			buffer[16-zdh.length()+i] = (byte)(zdh.charAt(i));
+		}
+//		buffer[6] = (byte) (0x00);
+//		buffer[7] = (byte) (0x00);
+//		buffer[8] = (byte) (0x00);
+//		buffer[9] = (byte) (0x00);
+//		buffer[10] = (byte) (0x00);
+//		buffer[11] = (byte)(zdh.charAt(0));
+//		buffer[12] = (byte)(zdh.charAt(1));
+//		buffer[13] = (byte)(zdh.charAt(2));
+//		buffer[14] = (byte)(zdh.charAt(3));
+//		buffer[15] = (byte)(zdh.charAt(4));
+		//时间间隔
+		buffer[16] = (byte) (timejg & 0xFF);
+		//产品id
+//		int cpid = 150446;
+		buffer[20] = (byte) (cpid & 0xFF);
+		buffer[19] = (byte) (cpid >> 8 & 0xFF);
+		buffer[18] = (byte) (cpid >> 16 & 0xFF);
+		buffer[17] = (byte) (cpid >> 24 & 0xFF);
+		//脚本名称
+//		String jiaoben = "sample";
+		for(int i=0;i<(10-jiaoben.length());i++){
+			buffer[21+i] = (byte) (0x00);
+		}
+		for(int i=0;i<jiaoben.length();i++){
+			buffer[31-jiaoben.length()+i] = (byte) (jiaoben.charAt(i));
+		}
+//		buffer[21] = (byte) (0x00);
+//		buffer[22] = (byte) (0x00);
+//		buffer[23] = (byte) (0x00);
+//		buffer[24] = (byte) (0x00);
+//		buffer[25] = (byte) (jiaoben.charAt(0));
+//		buffer[26] = (byte) (jiaoben.charAt(1));
+//		buffer[27] = (byte) (jiaoben.charAt(2));
+//		buffer[28] = (byte) (jiaoben.charAt(3));
+//		buffer[29] = (byte) (jiaoben.charAt(4));
+//		buffer[30] = (byte) (jiaoben.charAt(5));
+		//服务器IP  183.230.40.40
+//		String ip = "183.230.40.40";
+		String[] strs = ip.split("\\.");
+		buffer[31] = (byte) ((Integer.parseInt(strs[3])) & 0xFF);
+		buffer[32] = (byte) ((Integer.parseInt(strs[2])) & 0xFF);
+		buffer[33] = (byte) ((Integer.parseInt(strs[1])) & 0xFF);
+		buffer[34] = (byte) ((Integer.parseInt(strs[0])) & 0xFF);
+		//服务器端口1811
+//		int port = 1811;
+		buffer[35] = (byte) (port >> 8 & 0xFF);
+		buffer[36] = (byte) (port & 0xFF);
+
+		buffer[37] = (byte) (0x00);
+		SendCmdsApi api2 = new SendCmdsApi(dev_id, null, null, null, buffer, key);
+		BasicResponse<NewCmdsResponse> response2 = api2.executeApi();
+		System.out.println("发送指令--"+response2.getJson());
+	}
+	
+	/**
+	 * 重启
+	 * @param random
+	 */
+	//6.2.4	CMC_S_Restart
+	public void CMC_S_Restart(int random,String dev_id,String key){
+		byte[] buffer = new byte[7];
+		buffer[0] = (byte) (0xFF);
+		buffer[1] = (byte) (0x00);
+		buffer[2] = (byte) (3 & 0xFF);
+		
+		buffer[3] = (byte) (0xD3);
+		//序列号
+		buffer[4] = (byte) (random >> 8 & 0xFF);
+		buffer[5] = (byte) (random & 0xFF);
+		buffer[6] = (byte) (0x00);
+		SendCmdsApi api2 = new SendCmdsApi(dev_id, null, null, null, buffer, key);
+		BasicResponse<NewCmdsResponse> response2 = api2.executeApi();
+		System.out.println("发送指令--"+response2.getJson());
+	}
+	
+//CMC_S_VersionRcv
+//	if(value.equals("166")){
+//		//version最新的版本号
+//		String version = "v1.1";
+//		buffer = new byte[11];
+//		buffer[0] = (byte) (0xFF);
+//		 	buffer[1] = (byte) (0x00);
+//		 	buffer[2] = (byte) (0x07);
+//		 	buffer[3] = (byte) (0xD5);
+//		 	buffer[4] = (byte) (r.nextInt() >> 8 & 0xFF);
+//	 	buffer[5] = (byte) (r.nextInt() >> 16 & 0xFF);
+//		 	buffer[6] = (byte) (version.charAt(0));
+//		 	buffer[7] = (byte) (version.charAt(1));
+//		 	buffer[8] = (byte) (version.charAt(2));
+//		 	buffer[9] = (byte) (version.charAt(3));
+//		 	buffer[10]= (byte) (0x00);
+//	}
+	
+	//6.2.9	CMC_S_DataCheck
+	public void CMC_S_DataCheck(int random,String dev_id,String key,int cgqType,int csType,float val){
+		
+		byte[] buffer = new byte[13];
+		buffer[0] = (byte) (0xFF);
+		buffer[1] = (byte) (0x00);
+		buffer[2] = (byte) (0x09);
+		
+		buffer[3] = (byte) (0xD7);
+		//序列号
+		buffer[4] = (byte) (random >> 8 & 0xFF);
+		buffer[5] = (byte) (random & 0xFF);
+		
+		switch (cgqType) {
+		case 1:
+			buffer[6] = (byte) (0x10);
+			break;
+		case 2:
+			buffer[6] = (byte) (0x20);
+			break;
+		case 3:
+			buffer[6] = (byte) (0x30);
+			break;
+		case 4:
+			buffer[6] = (byte) (0x40);
+			break;
+		case 5:
+			buffer[6] = (byte) (0x50);
+			break;
+		case 6:
+			buffer[6] = (byte) (0x60);
+			break;
+		case 7:
+			buffer[6] = (byte) (0x70);
+			break;
+		case 8:
+			buffer[6] = (byte) (0x80);
+			break;
+		case 9:
+			buffer[6] = (byte) (0x90);
+			break;
+		case 10:
+			buffer[6] = (byte) (0xA0);
+			break;
+		case 11:
+			buffer[6] = (byte) (0xB0);
+			break;
+		case 12:
+			buffer[6] = (byte) (0xC0);
+			break;
+		case 13:
+			buffer[6] = (byte) (0xD0);
+			break;
+		default:
+			break;
+		}
+		
+		//参数类型
+		switch (csType) {
+		case 1:
+			buffer[7] = (byte) (0x01);
+			break;
+		case 2:
+			buffer[7] = (byte) (0x02);
+			break;
+		case 3:
+			buffer[7] = (byte) (0x03);
+			break;
+		case 4:
+			buffer[7] = (byte) (0x04);
+			break;
+		case 5:
+			buffer[7] = (byte) (0x05);
+			break;
+		case 6:
+			buffer[7] = (byte) (0x06);
+			break;
+		case 7:
+			buffer[7] = (byte) (0x07);
+			break;
+		case 8:
+			buffer[7] = (byte) (0x08);
+			break;
+		default:
+			break;
+		}
+		
+		
+		int intval = Float.floatToIntBits(val);
+		buffer[8]  = (byte) (intval >> 24 & 0xFF);
+		buffer[9]  = (byte) (intval >> 16 & 0xFF);
+		buffer[10] = (byte) (intval >> 8 & 0xFF);
+		buffer[11] = (byte) (intval & 0xFF);
+		buffer[12] = (byte) (0x00);
+		SendCmdsApi api2 = new SendCmdsApi(dev_id, null, null, null, buffer, key);
+		BasicResponse<NewCmdsResponse> response2 = api2.executeApi();
+		System.out.println("发送指令--"+response2.getJson());
+	}
+}

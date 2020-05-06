@@ -1,0 +1,232 @@
+package wy.qingdao_atmosphere.mobile.web;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+import wy.qingdao_atmosphere.mobile.service.AirAppService;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+@Controller
+public class AirAppController {
+	
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private AirAppService airAppService;
+	
+	/**
+	 * @author zzb
+	 * @description 大气现状-城市空气质量
+	 */
+	@RequestMapping(value = "/getAirSbyCity.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirCollect> getAirSbyCity(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气现状-城市空气质量---");
+		
+		List<AirCollect> list = airAppService.getAirSbyCity(request);
+		
+		return list;
+	}
+	
+	/**
+	 * @author zzb
+	 * @description 大气现状-获取站点
+	 */
+	@RequestMapping(value = "/getSiteSbyCity.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<Map<String, Object>> getSiteSbyCity(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气现状-获取站点---");
+		
+		List<Map<String, Object>> list = airAppService.getSiteSbyCity(request);
+		
+		return list;
+	}
+	
+
+	/**
+	 * @author zzb
+	 * @description 大气现状-站点空气质量
+	 */
+	@RequestMapping(value = "/getAirSbyObjid.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirCollect> getAirSbyObjid(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气现状-站点空气质量---");
+		
+		List<AirCollect> list = airAppService.getAirSbyObjid(request);
+		
+		return list;
+	}
+	
+	/**
+	 * @author zzb
+	 * @description 获取收藏时间
+	 */
+	@RequestMapping(value = "/getCollTime.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getCollTime(){
+		Logger.getLogger("").info("------------获取收藏时间--");
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+		Map<String, Object> map = new LinkedHashMap<String, Object>();
+		
+		map.put("colltime", sdf.format(new Date()));
+		return map;
+	}
+	
+	/**
+	 * @author zzb
+	 * @description 大气现状-城市收藏
+	 */
+	@RequestMapping(value="/cityColl.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public int cityColl(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气现状-城市收藏---");
+		
+		int objid = baseaddDao.baseAdd(request,  4, "4010001");
+		
+		return objid;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 大气现状-站点收藏
+	 */
+	@RequestMapping(value="/siteColl.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public int siteColl(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气现状-站点收藏---");
+		
+		int objid = baseaddDao.baseAdd(request,  5, "5010001");
+		
+		return objid;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 大气现状-获取收藏夹列表
+	 */
+	@RequestMapping(value = "/getColl.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> getColl(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气现状-获取收藏夹列表---");
+		
+		String userid = (request.getParameter("userid") == null || "".equals(request.getParameter("userid"))) ? "" : request.getParameter("userid");
+		
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objtypeid", 4);
+		map.put("userid", userid);
+		map.put("fieldid", "4010002");
+		List<Map<String,Object>> cityList = baseService.selectForCpAttachInfoStoreTwo(map, "AirAppPublic");
+		
+		map.clear();
+		map.put("objtypeid", 5);
+		map.put("userid", userid);
+		map.put("fieldid", "5010002");
+		List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(map, "AirAppPublic");
+		
+		map.clear();
+		map.put("cityList", cityList);
+		map.put("siteList", siteList);
+		
+		return map;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 大气地图-获取站点监测参数(浓度)
+	 */
+	@RequestMapping(value = "/getAirMdensity.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<AirCollect> getAirMdensity(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气地图-获取站点监测参数(浓度)---");
+		
+		List<AirCollect> list = airAppService.getAirMdensity(request);
+		
+		return list;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 大气地图-获取站点监测参数(优良率)
+	 */
+	@RequestMapping(value = "/getAirMgoodrate.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<Map<String, Object>> getAirMgoodrate(HttpServletRequest request){
+		Logger.getLogger("").info("------------大气地图-获取站点监测参数(优良率)---");
+		
+		List<Map<String, Object>> resultList = airAppService.getAirMgoodrate(request);
+		
+		return resultList;
+	}
+	
+	
+//======================================大气排名
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	/**
+	 * @author zzb
+	 * @description 意见反馈
+	 */
+	@RequestMapping(value="/suggestion.do",method = RequestMethod.POST,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public int suggestions(HttpServletRequest request){
+		Logger.getLogger("").info("------------意见反馈---");
+		
+		int objid = baseaddDao.baseAdd(request,  9, "9010001");
+		
+		return objid;
+	}
+	
+}

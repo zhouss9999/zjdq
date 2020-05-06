@@ -1,0 +1,512 @@
+package wy.qingdao_atmosphere.mobile.service;
+
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import wy.qingdao_atmosphere.mobile.dao.AirAppDao;
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+import wy.qingdao_atmosphere.mobile.domain.AirGoodRate;
+import wy.qingdao_atmosphere.onemap.dao.OneMapDao;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.util.AirBean;
+import wy.util.Calc;
+import wy.util.datapersistence.SpaceInfo;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+@Service("airAppService")
+public class AirAppServiceImpl implements AirAppService {
+
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private AirAppDao airAppDao;
+	
+	@Autowired
+	private OneMapDao oneMapDao;
+
+	
+	public AirCollect getSKQ4City(HttpServletRequest request) {
+		
+		//所属城市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		//获取数据库最大时间
+		String paramid = "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9";
+		String[] times = colMinMaxTimeByHour("1,4", 0, "", paramid, "1,5");
+			
+		//传参参数map
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		paramMap.put("city", city);
+		paramMap.put("begintime", times[0]);
+		paramMap.put("endtime", times[1]);
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		
+		//获取城市监测参数
+		AirCollect ac = airAppDao.getKQ4City(paramMap);
+		
+		if (ac == null) {
+			ac = new AirCollect();
+			ac.setCity(city);
+		} else {
+			//计算AQI,首要污染物,空气质量等级
+			AirBean ab = new AirBean(0, "", "", 0, Double.parseDouble(ac.getSo2()), Double.parseDouble(ac.getNo2()),
+					Double.parseDouble(ac.getPm10()),Double.parseDouble(ac.getPm25()), Double.parseDouble(ac.getCo()),
+					Double.parseDouble(ac.getO3()), Double.parseDouble(ac.getO38()),0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+			AirBean airQ = Calc.AirQ(ab);
+			
+			ac.setAqi(String.valueOf(airQ.getAqi()));
+			ac.setPollutant(airQ.getPp());
+			ac.setQuality(getStrAQlevel(airQ.getAqilevel()));
+		}
+		
+		return ac;
+	}
+	
+	
+	public List<AirCollect> getSKQ4Citys(HttpServletRequest request) {
+		
+		//用户账号
+		String userid = (request.getParameter("userid") == null || "".equals(request.getParameter("userid"))) ? "" : request.getParameter("userid");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("userid", userid);
+		paramMap.put("recently", "1 second");
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		
+		List<AirCollect> acList = airAppDao.getKQ4Citys(paramMap);
+		
+		if (acList.size() > 0) {
+			for (int i = 0; i < acList.size(); i++) {
+				AirCollect ac = acList.get(i);
+				
+				if (!"-".equals(ac.getCollecttime())) {
+					//计算AQI,首要污染物,空气质量等级
+					AirBean ab = new AirBean(0, "", "", 0, Double.parseDouble(ac.getSo2()), Double.parseDouble(ac.getNo2()),
+							Double.parseDouble(ac.getPm10()),Double.parseDouble(ac.getPm25()), Double.parseDouble(ac.getCo()),
+							Double.parseDouble(ac.getO3()), Double.parseDouble(ac.getO38()),0.0,0.0,0.0,0.0,0.0,0.0,0.0);
+					AirBean airQ = Calc.AirQ(ab);
+					
+					ac.setAqi(String.valueOf(airQ.getAqi()));
+					ac.setPollutant(airQ.getPp());
+					ac.setQuality(getStrAQlevel(airQ.getAqilevel()));
+				}
+			}
+		} else {
+			acList = new ArrayList<AirCollect>();
+		}
+		
+		return acList;
+	}
+	
+	
+	public List<KqzlColl> getSKQ4Sites(HttpServletRequest request) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("city", city);
+		paramMap.put("sitenumberid", "1010001,5010001");
+		paramMap.put("recently", "1 second");
+		
+		List<KqzlColl> list = airAppDao.getKQ4Site(paramMap);
+		
+		return list;
+	}
+	
+
+	public Map<String, Object> getSKQ4Site(HttpServletRequest request) {
+		
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		//获取数据库最大时间
+		String paramid = "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9";
+		String[] times = colMinMaxTimeByDay("1,4", 0, objid, paramid, "");
+		
+		String hourBgtime = times[0];
+		String hourEdtime = times[1];
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//当日24小时的监测数据(时均值)
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("objid", objid);
+		paramMap.put("begintime", hourBgtime);
+		paramMap.put("endtime", hourEdtime);
+		paramMap.put("sitenumberid", "1010001,5010001");
+		List<KqzlColl> hourlist = airAppDao.getKQ4Site(paramMap);
+		
+		//近一周7天的日监测数据(日均值)
+		String dayObjid = airAppDao.getDayDataObjid(objid);//获取对应的日数据站点objid
+		String[] daytime = colMinMaxTimeByDay("1,4", 7, dayObjid, paramid, "");
+		String dayBgtime = daytime[0];
+		String dayEdtime = daytime[1];
+		
+		paramMap.put("dateformat", "yyyy-mm-dd");
+		paramMap.put("begintime", dayBgtime);
+		paramMap.put("endtime", dayEdtime);
+		paramMap.put("sitenumberid", "2010002,6010002");
+		
+		List<KqzlColl> daylist = airAppDao.getKQ4Site(paramMap);
+		
+		paramMap.clear();
+		paramMap.put("newdata", hourlist.get(0));
+		paramMap.put("hourdata", hourlist);
+		paramMap.put("daydata", daylist);
+		
+		return paramMap;
+	}
+	
+
+	public List<KqzlColl> getMND4Sites(HttpServletRequest request) {
+		
+		//所属城市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		paramMap.put("recently", "1 second");
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("city", city);
+		paramMap.put("sitenumberid", "1010001,5010001");
+		
+		List<KqzlColl> siteList = airAppDao.getKQ4Site(paramMap);
+		
+		//获取所有站点坐标
+		String space_table = "space_site union select objid,id,st_AsText(shape) shape from space_countrysite";
+		List<SpaceInfo> siteGeomList = baseService.getGeomList(space_table, "");
+		Map<Integer, String> siteGeomMap = new LinkedHashMap<Integer, String>();
+		if (siteGeomList.size() > 0) {
+			for (SpaceInfo spaceInfo : siteGeomList) {
+				siteGeomMap.put(spaceInfo.getObjid(), spaceInfo.getShape().replace("POINT(", "").replace(")", ""));
+			}
+		}
+		
+		for (int i = 0; i < siteList.size(); i++) {
+			KqzlColl kc = siteList.get(i);
+			if (siteGeomMap.containsKey(kc.getObjid())) {
+				String[] geom = siteGeomMap.get(kc.getObjid()).split(" ");
+				kc.setLon(geom[0]);
+				kc.setLat(geom[1]);
+			}
+		}
+		
+		return siteList;
+	}
+
+
+	public Map<String, Object> getMND4Site(HttpServletRequest request) {
+		
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		
+		//获取站点近24小时的数据时间
+		String paramid = "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9";
+		String[] times = colMinMaxTimeByHour("1,4", 24, objid, paramid, "");
+		
+		String begintime = times[0];
+		String endtime = times[1];
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//近24小时的监测数据
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("objid", objid);
+		paramMap.put("begintime", begintime);
+		paramMap.put("endtime", endtime);
+		paramMap.put("sitenumberid", "1010001,5010001");
+		List<KqzlColl> hourlist = airAppDao.getKQ4Site(paramMap);
+		
+		paramMap.clear();
+		paramMap.put("newdata", hourlist.get(0));
+		paramMap.put("hourdata", hourlist);
+		
+		return paramMap;
+	}
+	
+	
+	public List<AirGoodRate> getMYL4Sites(HttpServletRequest request) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		paramMap.put("recently", "30 day");
+		paramMap.put("dateformat", "yyyy-mm-dd");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("city", city);
+		paramMap.put("sitenumberid", "2010002,6010002");
+		
+		//各个站点近30天的优良率
+		List<Map<String, Object>> siteList = oneMapDao.getOmAllSiteGoodRate(paramMap);
+		
+		List<AirGoodRate> resultList = new ArrayList<AirGoodRate>();
+		
+		//设置objid,站点编号,站点名称,站点级别,优良率
+		for (Map<String, Object> kc : siteList) {
+			AirGoodRate agr = new AirGoodRate(Integer.parseInt(kc.get("objid").toString()), kc.get("sitenumber").toString(),
+					kc.get("sitename").toString(), kc.get("issite").toString(), kc.get("goodrate").toString());
+			resultList.add(agr);
+		}
+		
+		//获取所有站点坐标
+		String space_table = "space_site union select objid,id,st_AsText(shape) shape from space_countrysite";
+		List<SpaceInfo> siteGeomList = baseService.getGeomList(space_table, "");
+		Map<Integer, String> siteGeomMap = new LinkedHashMap<Integer, String>();
+		if (siteGeomList.size() > 0) {
+			for (SpaceInfo spaceInfo : siteGeomList) {
+				siteGeomMap.put(spaceInfo.getObjid(), spaceInfo.getShape().replace("POINT(", "").replace(")", ""));
+			}
+		}
+		
+		for (int i = 0; i < resultList.size(); i++) {
+			AirGoodRate agr = resultList.get(i);
+			if (siteGeomMap.containsKey(agr.getObjid())) {
+				String[] geom = siteGeomMap.get(agr.getObjid()).split(" ");
+				agr.setLon(geom[0]);
+				agr.setLat(geom[1]);
+			}
+		}
+		
+		return resultList;
+	}
+	
+	
+	public Map<String, Object> getMYL4Site(HttpServletRequest request, int day) {
+		
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		//获取对应日数据的objid
+		String dayObjid = airAppDao.getDayDataObjid(objid);
+		
+		//获取站点近30天的数据时间
+		String paramid = "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9";
+		String[] times = colMinMaxTimeByDay("1,4", day, dayObjid, paramid, "");
+		
+		String begintime = times[0];
+		String endtime = times[1];
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//近30天的监测数据
+		paramMap.put("dateformat", "yyyy-mm-dd");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("objid", objid);
+		paramMap.put("begintime", begintime);
+		paramMap.put("endtime", endtime);
+		paramMap.put("sitenumberid", "2010002,6010002");
+		
+		List<KqzlColl> daylist = airAppDao.getKQ4Site(paramMap);
+		
+		//计算优良率
+		int good = 0;
+		int size = daylist.size();
+		if (daylist.size() > 0) {
+			for (KqzlColl kc : daylist) {
+				if ("优".equals(kc.getQuality()) || "良".equals(kc.getQuality())) {
+					good += 1;
+				}
+			}
+		} else {
+			size = 1;
+		}
+		
+		DecimalFormat df = new DecimalFormat("#0.0");//保留一位小数(奇进偶舍)
+		df.setRoundingMode(RoundingMode.HALF_UP);//(四舍五入)
+		paramMap.clear();
+		paramMap.put("goodrate", df.format(((double)good/size)*100));
+		paramMap.put("daydata", daylist);
+		
+		return paramMap;
+	}
+	
+
+	public List<KqzlColl> getRAQ4Sites(HttpServletRequest request) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		//排序(DESC倒序/ASC正序)--默认倒序
+		String sort = (request.getParameter("sort") == null || "".equals(request.getParameter("sort"))) ? "DESC" : request.getParameter("sort");
+		
+		//获取站点最新实时数据时间点
+		String paramid = "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9";
+		String[] times = colMinMaxTimeByHour("1,4", 0, "", paramid, "1,5");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("city", city);
+		paramMap.put("begintime", times[0]);
+		paramMap.put("endtime", times[1]);
+		paramMap.put("sitenumberid", "1010001,5010001");
+		paramMap.put("sortaqi", sort);
+		
+		List<KqzlColl> siteList = airAppDao.getRank4Site(paramMap);
+		
+		return siteList;
+	}
+
+	
+	public List<AirGoodRate> getRYLSites(HttpServletRequest request, int day) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		//排序(DESC倒序/ASC正序)--默认倒序
+		String sort = (request.getParameter("sort") == null || "".equals(request.getParameter("sort"))) ? "DESC" : request.getParameter("sort");
+		
+		//获取站点近day天日数据时间点
+		String paramid = "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9";
+		String[] times = colMinMaxTimeByDay("1,4", day, "", paramid, "2,6");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		paramMap.put("dateformat", "yyyy-mm-dd");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("city", city);
+		paramMap.put("begintime", times[0]);
+		paramMap.put("endtime", times[1]);
+		paramMap.put("sitenumberid", "2010002,6010002");
+		paramMap.put("sortrate", sort);
+		
+		//站点近day天的优良率
+		List<Map<String, Object>> siteList = oneMapDao.getOmAllSiteGoodRate(paramMap);
+		
+		List<AirGoodRate> resultList = new ArrayList<AirGoodRate>();
+		
+		//设置objid,站点编号,站点名称,站点级别,优良率
+		for (Map<String, Object> kc : siteList) {
+			AirGoodRate agr = new AirGoodRate(Integer.parseInt(kc.get("objid").toString()), kc.get("sitenumber").toString(),
+					kc.get("sitename").toString(), kc.get("issite").toString(), kc.get("goodrate").toString());
+			resultList.add(agr);
+		}
+		
+		return resultList;
+	}
+	
+	
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n小时)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param hour 小时
+	 * @param objid 对象id
+	 * @param paramid 参数id
+	 * @param objtypeid 对象类型id
+	 * @return {mintime,maxtime}
+	 * 
+	 * 空气质量paramid：1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9 -->
+	 * 空气质量objtypeid：实时数据(1,5),日数据(2,6) 
+	 */
+	private String[] colMinMaxTimeByHour(String devicetypeid, int hour, String objid, String paramid, String objtypeid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:MI:ss", devicetypeid, paramid, objtypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		Date date = new Date();
+		try {
+			if (maxtime != null && !"".equals(maxtime)) {
+					date = sdf.parse(maxtime);
+			} else {
+				maxtime = sdf.format(date);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.HOUR_OF_DAY, calendar.get(Calendar.HOUR_OF_DAY)-hour);//(maxtime-n小时)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime,maxtime};
+		
+		return times;
+	}
+
+
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n天)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param day 天
+	 * @param objid 对象id
+	 * @param paramid 参数id
+	 * @param objtypeid 对象类型id
+	 * @return {mintime,maxtime}
+	 * 
+	 * 空气质量paramid：1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9 -->
+	 * 空气质量objtypeid：实时数据(1,5),日数据(2,6)
+	 */
+	private String[] colMinMaxTimeByDay(String devicetypeid, int day, String objid, String paramid, String objtypeid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd", devicetypeid, paramid, objtypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		Date date = new Date();
+		try {
+			if (maxtime != null && !"".equals(maxtime)) {
+				date = sdf.parse(maxtime);
+			} else {
+				maxtime = sdf.format(date);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.DAY_OF_MONTH, calendar.get(Calendar.DAY_OF_MONTH)-day);//(maxtime-n天)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime + " 00:00:00",maxtime + " 23:59:59"};
+		
+		return times;
+	}
+
+	
+	/**
+	 * 传入水质类别String类型，
+	 * 返回对应水质类别的int类型
+	 * @author zzb
+	 * @param AQlevel
+	 */
+	private String getStrAQlevel(int AQlevel) {
+		String AQlevelStr = "-";
+		if (AQlevel == 1) {
+			AQlevelStr = "优";
+		} else if (AQlevel == 2) {
+			AQlevelStr = "良";
+		} else if (AQlevel == 3) {
+			AQlevelStr = "轻度污染";
+		} else if (AQlevel == 4) {
+			AQlevelStr = "中度污染";
+		} else if (AQlevel == 5) {
+			AQlevelStr = "重度污染";
+		} else {
+			AQlevelStr = "严重污染";
+		}
+		
+		return AQlevelStr;
+	}
+
+
+}

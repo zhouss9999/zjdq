@@ -1,0 +1,220 @@
+package wy.qingdao_atmosphere.reportform.timer;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import cmcc.iot.onenet.javasdk.api.datapoints.AddDatapointsApi;
+import cmcc.iot.onenet.javasdk.api.datastreams.AddDatastreamsApi;
+import cmcc.iot.onenet.javasdk.model.Data;
+import cmcc.iot.onenet.javasdk.model.Datapoints;
+import cmcc.iot.onenet.javasdk.response.BasicResponse;
+import cmcc.iot.onenet.javasdk.response.datastreams.NewdatastramsResponse;
+
+import net.sf.json.JSONArray;
+
+/**
+ * 定时获取青岛探空曲线
+ * @author KEYI
+ *
+ */
+//@Component
+public class TkqxTimer {
+	
+	public static void main(String[] args) {
+		Calendar cal = Calendar.getInstance();
+		int year = cal.get(Calendar.YEAR);
+	    int month = cal.get(Calendar.MONTH) + 1;
+	    int day = cal.get(Calendar.DATE);
+	    cal.add(Calendar.DAY_OF_MONTH, -1);
+	    int year2 = cal.get(Calendar.YEAR);
+	    int month2 = cal.get(Calendar.MONTH) + 1;
+	    int day2 = cal.get(Calendar.DATE);
+	    
+	}
+	
+//	@Scheduled(cron = "0 0/10 * * * ?")
+	public void getTkqxTimer(){
+		SimpleDateFormat format = new SimpleDateFormat("yyyy:MM:dd'T'HH:mm:ss");
+		Calendar cal = Calendar.getInstance();
+		int year = cal.get(Calendar.YEAR);
+	    int month = cal.get(Calendar.MONTH) + 1;
+	    int day = cal.get(Calendar.DATE);
+	    cal.add(Calendar.DAY_OF_MONTH, -1);
+	    int year2 = cal.get(Calendar.YEAR);
+	    int month2 = cal.get(Calendar.MONTH) + 1;
+	    int day2 = cal.get(Calendar.DATE);
+
+		String form = "FROM="+day2+"12&TO="+day2+"12";
+		String url = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR="+year+"&MONTH="+month+"&"+form+"&STNM=54857";
+		Map<String, Object> map = getTkqxMap(url);
+		oneNet("tkqx3", Integer.parseInt(map.get("num").toString()));
+		String form2 = "FROM="+(day-1)+"00&TO="+(day-1)+"12";
+		String url2 = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR="+year+"&MONTH="+month+"&"+form2+"&STNM=54857";
+		Map<String, Object> map2 = getTkqxMap(url2);
+		oneNet("tkqx4", Integer.parseInt(map2.get("num").toString()));
+	}
+	
+	//解析url
+	public String getTkqxJson(String url){
+		String a = null;
+		try {
+//			String url = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR=2018&MONTH=08&FROM=1000&TO=1000&STNM=54857";
+			BufferedReader in = new BufferedReader(new InputStreamReader(
+					new URL(url).openConnection().getInputStream(), "GB2312"));//GB2312可以根据需要替换成要读取网页的编码
+			boolean ishas = false;//需要处理的内容
+			boolean isStation = false;
+			int topNumber = 0;
+			List<Map<String, Object>> topName = new ArrayList<Map<String,Object>>();
+			List<Map<String, Object>> resultList = new ArrayList<Map<String,Object>>();
+			while ((a = in.readLine()) != null) {
+				if(a.contains("Station identifier")){
+					isStation = true;
+				}
+				if(a.contains("</PRE>")){
+					ishas = false;
+				}
+				if(ishas){
+					if(isStation){
+						//处理下半段
+						
+					}else{
+						//处理上半段
+						System.out.println(a);
+						char [] chara = a.toCharArray();
+						//获取表头信息
+						if(topNumber==1){
+							int start = 0;
+							int end = 0;
+							for(int i =0;i<chara.length;i++){
+								if(chara[i]==' '&&chara[i+1]!=' '){
+									start = i+1;
+								}
+								if(i==chara.length-1||(chara[i+1]==' '&&chara[i]!=' ')){
+									end = i;
+									String name = "";
+									for (int j = start; j <= end; j++) {
+										name += chara[j];
+									}
+									Map<String, Object> map = new HashMap<String, Object>();
+									map.put("name", name);
+									map.put("index", end);
+									topName.add(map);
+								}
+								
+							}
+						}
+						
+						if(topNumber>3){
+							Map<String, Object> map = new HashMap<String, Object>();
+							int startVal = 0;
+							for(int i = 0 ; i<topName.size();i++){
+								int index = (Integer) topName.get(i).get("index");
+								map.put(topName.get(i).get("name").toString(), a.substring(startVal,index+1).trim());
+								startVal = index+1;
+							}
+							resultList.add(map);
+						}
+						
+						topNumber++;
+					}
+//					String text = a.trim().replaceAll("\\s+",",");
+
+				}
+				if(a.contains("<PRE>")){
+					ishas = true;
+				}
+			}
+			JSONArray json = JSONArray.fromObject(resultList); 
+//			System.out.println(json.toString());
+			return json.toString();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
+		} 
+	
+	
+	}
+	
+	public Map<String, Object> getTkqxMap(String url){
+		Map<String, Object> map = new HashMap<String, Object>();
+		String a = null;
+		try {
+//			String url = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR=2018&MONTH=08&FROM=1600&TO=1600&STNM=54857";
+			BufferedReader in = new BufferedReader(new InputStreamReader(
+					new URL(url).openConnection().getInputStream(), "GB2312"));//GB2312可以根据需要替换成要读取网页的编码
+			boolean ishas = false;//需要处理的内容
+			boolean isStation = false;
+			int topNumber = 0;
+			String aa = "";
+			while ((a = in.readLine()) != null) {
+//				System.out.println(a);
+				if(a.contains("Station identifier")){
+					isStation = true;
+				}
+				if(a.contains("</PRE>")){
+					ishas = false;
+				}
+				if(ishas){
+					if(isStation){
+						//处理下半段
+						
+					}else{
+						//处理上半段
+						aa+=a;
+						topNumber++;
+					}
+
+				}
+				if(a.contains("<PRE>")){
+					ishas = true;
+					isStation = false;
+				}
+			}
+			map.put("num", topNumber);
+			map.put("val", aa);
+		} catch (Exception e) {
+			e.printStackTrace();
+		} 
+		return map;
+	
+	}
+	
+	public void oneNet(String zdid,int val){
+		String devid = "39216377";//test2
+		String key = "2FdOJpczC79jcAEW=Mg=mll1=TQ=";
+		List<Datapoints> list = new ArrayList<Datapoints>();
+		List<Data> dl = new ArrayList<Data>();
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+		dl.add(new Data(format.format(new Date()), val));
+		list.add(new Datapoints(zdid, dl));
+		Map<String, List<Datapoints>> map = new HashMap<String, List<Datapoints>>();
+		map.put("datastreams", list);
+		/**
+		 * 数据点新增
+		 * @param map :数据点内容,Map<String,List<Datapoints>>
+		 * @param data:提供简写方式上传数据,String
+		 * 示例：
+		 * type=4
+		 * data="{\"temperature\":{\"2015-03-22T22:31:12\":22.5}}";
+		 * type=5
+		 * data=",;temperature,2015-03-22T22:31:12,22.5;pm2.5,89";
+		 * @param type:上传数据类型（可选，默认为完整JSON型，见HTTP内容示例）
+		 * @param devId:设备ID,String
+		 * @param key:masterkey 或者 设备apikey
+		 */
+		AddDatapointsApi api = new AddDatapointsApi(map, null, null, devid, key);
+		BasicResponse<Void> response = api.executeApi();
+//		System.out.println("errno:"+response.errno+" error:"+response.error);
+	}
+}

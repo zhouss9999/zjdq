@@ -1,0 +1,368 @@
+package wy.qingdao_atmosphere.onemap.web;
+
+import java.io.StringWriter;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import net.sf.json.JSONArray;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+import wy.qingdao_atmosphere.onemap.service.OneMapService;
+import wy.util.DatapointsApiThreadUtil;
+import wy.util.datapersistence.service.BaseService;
+
+@Controller
+public class OneMapController {
+	
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private OneMapService oneMapService;
+	
+	
+	/**===================================================================================================
+	 * ================================================一张图-目录===========================================*/	
+	/**
+	 * @author zzb
+	 * @description 一张图-获取目录列表
+	 */
+	@RequestMapping(value = "/getOmMenuList.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<OmMenu> getOmMenuList(HttpServletRequest request){
+		Logger.getLogger("").info("-----------一张图-获取目录列表---");
+		
+		List<OmMenu> menuList = oneMapService.getOmMenuList();
+		return menuList;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================一张图-国家监测站===========================================*/
+	/**
+	 * @author zzb
+	 * @description 一张图-国家监测站-坐标信息及其他
+	 * 
+	 */
+	@RequestMapping(value = "/getOmGzGeom.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public String getOmGzGeom(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-国家监测站-坐标信息及其他--");
+		
+		StringWriter gzGeom = oneMapService.getOmSiteGeom(request, "");
+		
+		return gzGeom.toString();
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-国家监测站-站点基本信息详情
+	 */
+	@RequestMapping(value = "/omGzDetail.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<KqzlColl> omGzDetail(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-国家监测站-站点基本信息详情---");
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		paramMap.put("recently", "'1 second'");
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("sitenameid", "5010003");
+		paramMap.put("sitenumberid", "5010001");
+		paramMap.put("objtypeid", 5);
+		
+		List<KqzlColl> siteDetail = oneMapService.getOmGzSiteForKqzl(request, paramMap);
+
+		return siteDetail;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-国家监测站-站点实时数据(近24小时)
+	 */
+	@RequestMapping(value = "/omGzCurrent.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<KqzlColl> omGzCurrent(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-国家监测站-站点实时数据(近24小时)---");
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		paramMap.put("recently", "'24 hour'");
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("sitenameid", "5010003");
+		paramMap.put("sitenumberid", "5010001");
+		paramMap.put("objtypeid", 5);
+		
+		List<KqzlColl> currentList = oneMapService.getOmGzSiteForKqzl(request, paramMap);
+		
+		return currentList;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-国家监测站-站点历史数据
+	 */
+	@RequestMapping(value = "/omGzHistory.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<KqzlColl> omGzHistory(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-国家监测站-站点历史数据---");
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("history", "history");
+		
+		List<KqzlColl> historyList = oneMapService.getOmGzSiteForKqzl(request, paramMap);
+		
+		return historyList;
+	}
+	
+	
+	/**===================================================================================================
+	 * ================================================一张图-微站监测,接口待完成完善===========================================*/
+	/**
+	 * @author zzb
+	 * @description 一张图-微站监测-坐标及其他
+	 * 
+	 */
+	@RequestMapping(value = "/getOmWzGeom.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public String getOmWzGeom(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-微站监测-坐标及其他--");
+		
+		StringWriter wzGeom = oneMapService.getOmSiteGeom(request, "wz");
+		
+		return wzGeom.toString();
+	}
+
+	
+	
+	
+	/**===================================================================================================
+	 * ================================================一张图-微波辐射监测===========================================*/
+	/**
+	 * @author zzb
+	 * @description 一张图-微波辐射监测-站点基本信息详情
+	 */
+	@RequestMapping(value = "/omfsSiteDetail.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public List<Map<String, Object>> omfsSiteDetail(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-微波辐射监测-站点基本信息详情---");
+		
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "0" : request.getParameter("objid");
+		List<Map<String, Object>> siteDetail = baseService.selectDetailForCpAttachInfoStoreTwo(Integer.parseInt(objid));
+		
+		return siteDetail;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-微波辐射监测-廓线时空分布图
+	 */
+	@RequestMapping(value = "/omfsKxSkFb.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> omfsKxSkFb(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-微波辐射监测-廓线时空分布图---");
+		
+		String datastreamIds = "kx_sqmdkx,kx_wdkx,kx_xdsdkx,kx_bjcwdkx,jc_fwjd,jc_fyjd";
+		Map<String, Object> resultMap = oneMapService.omFsData(request,datastreamIds);
+		
+		for(Map.Entry<String, Object> entry : resultMap.entrySet()){
+			if ("jc_fwjd".equals(entry.getKey()) || "jc_fyjd".equals(entry.getKey())) {
+				resultMap.put(entry.getKey(), ((JSONArray)entry.getValue()).getJSONObject(0).get("value"));
+			}
+        }
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-微波辐射监测-廓线实时数据
+	 */
+	@RequestMapping(value = "/omfsKxSsSj.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> omfsKxSsSj(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-微波辐射监测-廓线实时数据---");
+		
+		request.setAttribute("actual", "actual");
+		
+		String datastreamIds = "kx_sqmdkx,kx_wdkx,kx_xdsdkx,kx_bjcwdkx,jc_fwjd,jc_fyjd";
+		Map<String, Object> map = oneMapService.omFsData(request,datastreamIds);
+		
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		
+		for(Map.Entry<String, Object> entry : map.entrySet()){
+			if ("jc_fwjd".equals(entry.getKey()) || "jc_fyjd".equals(entry.getKey())) {
+				resultMap.put(entry.getKey(), ((JSONArray)entry.getValue()).getJSONObject(0).get("value"));
+			} else {
+				resultMap.put(entry.getKey(), ((JSONArray)entry.getValue()).getJSONObject(0));
+			}
+        }
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-微波辐射监测-通道亮温
+	 */
+	@RequestMapping(value = "/omfsTdlwSj.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> omfsTdlwSj(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-微波辐射监测-通道亮温---");
+		
+		String param_k = "jc_k1,jc_k2,jc_k3,jc_k4,jc_k5,jc_k6,jc_k7,jc_k8";
+		Map<String, Object> kmap = oneMapService.omFsData(request,param_k);
+		
+		String param_v = "jc_v1,jc_v2,jc_v3,jc_v4,jc_v5,jc_v6,jc_v7,jc_v8";
+		Map<String, Object> vmap = oneMapService.omFsData(request,param_v);
+		
+		String param_o = "jc_jyzt,fy_ydgd,jc_fwjd,jc_fyjd";
+		Map<String, Object> resultMap = oneMapService.omFsData(request,param_o);
+		
+		for(Map.Entry<String, Object> entry : resultMap.entrySet()){
+			if ("jc_fwjd".equals(entry.getKey()) || "jc_fyjd".equals(entry.getKey())) {
+				resultMap.put(entry.getKey(), ((JSONArray)entry.getValue()).getJSONObject(0).get("value"));
+			}
+        }
+		
+		resultMap.put("ktd", kmap);
+		resultMap.put("vtd", vmap);
+		
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @author zzb
+	 * @description 一张图-微波辐射监测-其他廓线实时数据
+	 */
+	@RequestMapping(value = "/omfsOtherKx.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> omfsOtherKx(HttpServletRequest request){
+		Logger.getLogger("").info("------------一张图-微波辐射监测-其他廓线实时数据---");
+		
+		String datastreamIds = "fy_sqzhl,fy_ljytszhl,fy_hwlw,jc_dmwd,jc_dmsd,jc_dmyq,jc_fwjd,jc_fyjd";
+		Map<String, Object> resultMap = oneMapService.omFsData(request,datastreamIds);
+		
+		for(Map.Entry<String, Object> entry : resultMap.entrySet()){
+			if ("jc_fwjd".equals(entry.getKey()) || "jc_fyjd".equals(entry.getKey())) {
+				resultMap.put(entry.getKey(), ((JSONArray)entry.getValue()).getJSONObject(0).get("value"));
+			}
+        }
+				
+		return resultMap;
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	/**===================================================================================================
+	 * ================================================一张图-测试===========================================*/
+	
+	@RequestMapping(value = "/test.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public Map<String, Object> test(HttpServletRequest request){
+		
+		String datastreamIds = "kx_sqmdkx,kx_wdkx,kx_xdsdkx,kx_bjcwdkx,jc_fwjd,jc_fyjd";
+		String devid = "36814568";
+		String key = "2FdOJpczC79jcAEW=Mg=mll1=TQ=";
+		String startTime = "2018-08-12 00:00:00";
+		String endTime = "2018-08-14 23:59:59";
+		
+		Map<String, Object> dataMap = new LinkedHashMap<String, Object>();
+		
+		dataMap = DatapointsApiThreadUtil.getDatapointsApi(datastreamIds, devid, key, 
+				startTime, endTime, null, "DESC", dataMap);
+		
+		return dataMap;
+	}
+	
+	
+	public static void main(String[] args) {
+		String datastreamIds = "kx_sqmdkx,kx_wdkx,kx_xdsdkx,kx_bjcwdkx,jc_fwjd,jc_fyjd";
+		String devid = "36814568";
+		String key = "2FdOJpczC79jcAEW=Mg=mll1=TQ=";
+		String startTime = "2018-08-12 00:00:00";
+		String endTime = "2018-08-14 23:59:59";
+		
+		Map<String, Object> dataMap = new LinkedHashMap<String, Object>();
+		
+		dataMap = DatapointsApiThreadUtil.getDatapointsApi(datastreamIds, devid, key, 
+				startTime, endTime, null, "DESC", dataMap);
+		
+		System.out.println("===全部结束,OVER");
+		System.out.println(dataMap.size());
+	}
+}

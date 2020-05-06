@@ -1,0 +1,89 @@
+package wy.qingdao_atmosphere.weatheranalyze.web;
+
+import java.util.Map;
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import org.apache.log4j.Logger;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import wy.qingdao_atmosphere.weatheranalyze.service.WeatherAnalyzeService;
+
+/**
+ * @author xsq
+ * @description 气象分析Controller层接口调用类
+ * 
+ */
+@Controller
+public class WeatherAnalyzeController {
+	
+	private WeatherAnalyzeService weatherAnalyzeService;
+	
+	public WeatherAnalyzeService getWeatherAnalyzeService() {
+		return weatherAnalyzeService;
+	}
+	@Resource
+	public void setWeatherAnalyzeService(WeatherAnalyzeService weatherAnalyzeService) {
+		this.weatherAnalyzeService = weatherAnalyzeService;
+	}
+
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取数据信息
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param forecastDate 日期
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	@RequestMapping(value = "/getWRFOrCALPUFWeatherData.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+    @ResponseBody
+	public Map<String, Object> getWRFOrCALPUFWeatherData(HttpServletRequest request){
+		String weatherType = (request.getParameter("weatherType") == null || "".equals(request.getParameter("weatherType"))) ? "" : request.getParameter("weatherType");
+		String forecastDate = (request.getParameter("forecastDate") == null || "".equals(request.getParameter("forecastDate"))) ? "" : request.getParameter("forecastDate");		
+		double height = (request.getParameter("height") == null || "".equals(request.getParameter("height"))) ? 0 : Double.parseDouble(request.getParameter("height"));
+		String patternType = (request.getParameter("patternType") == null || "".equals(request.getParameter("patternType"))) ? "" : request.getParameter("patternType");		
+		Logger.getLogger("").info("根据气场类型为："+weatherType+"时间为："+forecastDate+" 获取"+patternType+"气象信息");
+		return weatherAnalyzeService.getWRFOrCALPUFWeatherData(weatherType, forecastDate, height, patternType);
+	}
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取风场UV数据信息
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)],CALPUF模式：[wind(风场)]
+	 * @param forecastTime 日期时间
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	@RequestMapping(value = "/getWRFOrCALPUFWeatherWindUVDataByTime.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+    @ResponseBody
+	public Map<String, Object> getWRFOrCALPUFWindUVDataInfo(HttpServletRequest request){
+		String weatherType = (request.getParameter("weatherType") == null || "".equals(request.getParameter("weatherType"))) ? "" : request.getParameter("weatherType");
+		String forecastTime = (request.getParameter("forecastTime") == null || "".equals(request.getParameter("forecastTime"))) ? "" : request.getParameter("forecastTime");		
+		double height = (request.getParameter("height") == null || "".equals(request.getParameter("height"))) ? 0 : Double.parseDouble(request.getParameter("height"));
+		String patternType = (request.getParameter("patternType") == null || "".equals(request.getParameter("patternType"))) ? "" : request.getParameter("patternType");		
+		Logger.getLogger("").info("根据时间为："+forecastTime+" 获取"+patternType+"气象风场UV量信息");
+		return weatherAnalyzeService.getWRFOrCALPUFWindUVDataInfo(weatherType, forecastTime, height, patternType);
+	}
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度和经纬度获取网格数据信息
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param lonlat 经纬度
+	 * @param forecastTime 时间
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	@RequestMapping(value = "/getWRFOrCALPUFGriddingDataInfo.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String, Object> getWRFOrCALPUFGriddingDataInfo(HttpServletRequest request){
+		String weatherType = (request.getParameter("weatherType") == null || "".equals(request.getParameter("weatherType"))) ? "" : request.getParameter("weatherType");
+		String lonlat = (request.getParameter("lonlat") == null || "".equals(request.getParameter("lonlat"))) ? "" : request.getParameter("lonlat");
+		String forecastTime = (request.getParameter("forecastTime") == null || "".equals(request.getParameter("forecastTime"))) ? "" : request.getParameter("forecastTime");		
+		double height = (request.getParameter("height") == null || "".equals(request.getParameter("height"))) ? 0 : Double.parseDouble(request.getParameter("height"));
+		String patternType = (request.getParameter("patternType") == null || "".equals(request.getParameter("patternType"))) ? "" : request.getParameter("patternType");		
+		Logger.getLogger("").info("根据时间为："+forecastTime+" 获取"+patternType+"模式下气象类型为"+weatherType+"的网格数据信息");
+		return weatherAnalyzeService.getWRFOrCALPUFGriddingDataInfo(weatherType, lonlat, forecastTime, height, patternType);
+	}
+}

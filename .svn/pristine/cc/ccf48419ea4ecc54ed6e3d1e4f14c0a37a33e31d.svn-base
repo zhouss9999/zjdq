@@ -1,0 +1,696 @@
+package wy.qingdao_atmosphere.countanalysis.service;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import wy.qingdao_atmosphere.countanalysis.dao.CountDao;
+import wy.qingdao_atmosphere.countanalysis.domain.AreaSiteCount;
+import wy.qingdao_atmosphere.onemap.dao.OneMapDao;
+import wy.qingdao_atmosphere.onemap.domain.OmRank;
+import wy.util.datapersistence.Dao.BaseaddDao;
+
+@Service("countService")
+public class CountServiceImpl implements CountService {
+	
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired
+	private OneMapDao oneMapDao;
+	
+	@Autowired
+	private CountDao countDao;
+	
+	
+	public List<String> getAreaName(HttpServletRequest request){
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		
+		List<String> list = countDao.getAreaName(city);
+		
+		return list;
+	}
+	
+	
+	public Map<String, Object> getRankByAQI(HttpServletRequest request) {
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		//所属区域
+		String area = (request.getParameter("area") == null || "".equals(request.getParameter("area"))) ? "市南区" : request.getParameter("area");
+		
+		paramMap.put("city", city);
+		paramMap.put("area", area);
+		paramMap.put("jbobjtypeid", "1,5");
+		
+		String[] timetype = {"hour","day","month"};
+		
+		//获取数据库最大实时数据时间、最大日数据时间
+		String[] hourMaxTime = colMinMaxTimeByHour("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1,5");
+		String[] dayMaxTime = colMinMaxTimeByDay("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2,6");
+		
+		List<OmRank> hourRank = new ArrayList<OmRank>();
+		List<OmRank> dayRank = new ArrayList<OmRank>();
+		List<OmRank> monthRank = new ArrayList<OmRank>();
+		
+		//最新实时数据
+		if ("hour".equals(timetype[0])) {
+			paramMap.put("begintime", hourMaxTime[1]);
+			paramMap.put("endtime", hourMaxTime[1]);
+			paramMap.put("objtypeid", "1,5");
+			paramMap.put("dateformat", "yyyy年mm月dd日HH24时");
+			paramMap.put("sitenameid", "1010003,5010003");
+			paramMap.put("sitenumberid", "1010001,5010001");
+			paramMap.put("aqi", "aqi");
+			
+			hourRank = oneMapDao.omRankByArea(paramMap);
+		}
+		//最新日数据
+		if ("day".equals(timetype[1])) {
+			paramMap.put("begintime", dayMaxTime[0]);
+			paramMap.put("endtime", dayMaxTime[1]);
+			paramMap.put("objtypeid", "2,6");
+			paramMap.put("dateformat", "yyyy年mm月dd日");
+			paramMap.put("sitenameid", "2010001,6010001");
+			paramMap.put("sitenumberid", "2010002,6010002");
+			paramMap.put("aqi", "aqi");
+			
+			dayRank = oneMapDao.omRankByArea(paramMap);
+		}
+		//最新月优良率
+		if ("month".equals(timetype[2])) {
+			paramMap.put("begintime", dayMaxTime[1].substring(0, 7) +"-01 00:00:00");
+			paramMap.put("endtime", getLastDayOfMonth(dayMaxTime[1].substring(0, 7)));
+			paramMap.put("objtypeid", "2,6");
+			paramMap.put("dateformat", "yyyy年mm月");
+			paramMap.put("sitenameid", "2010001,6010001");
+			paramMap.put("sitenumberid", "2010002,6010002");
+			paramMap.put("goodrate", "goodrate");
+			
+			monthRank = oneMapDao.omRankByArea(paramMap);
+		}
+		
+		paramMap.clear();
+		
+		paramMap.put("hourRank", hourRank);
+		paramMap.put("dayRank", dayRank);
+		paramMap.put("monthRank", monthRank);
+		
+		return paramMap;
+	}
+
+	
+	public Map<String, Object> getAQIByYear(HttpServletRequest request){
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		//所属区域
+		String area = (request.getParameter("area") == null || "".equals(request.getParameter("area"))) ? "市南区" : request.getParameter("area");
+		
+		paramMap.put("city", city);
+		paramMap.put("area", area);
+		paramMap.put("jbobjtypeid", "1");
+		
+		//获取本年度年份
+		String year = new SimpleDateFormat("yyyy").format(new Date());
+		
+		paramMap.put("begintime", year +"-01-01 00:00:00");
+		paramMap.put("endtime", year +"-12-31 23:59:59");
+		paramMap.put("objtypeid", "2");
+		paramMap.put("dateformat", "yyyy");
+		paramMap.put("sitenameid", "2010001");
+		paramMap.put("sitenumberid", "2010002");
+		paramMap.put("goodrate", "goodrate");
+		
+		List<OmRank> resultList = oneMapDao.omRankByArea(paramMap);
+		
+		paramMap.clear();
+		if (resultList.size() > 0) {
+			for (OmRank or : resultList) {
+				paramMap.put("area", or.getArsiname());			//区域名称
+				paramMap.put("datetime", or.getCollecttime());	//数据时间
+				paramMap.put("goodrate", or.getGoodrate());		//优良率
+				paramMap.put("goodday", or.getGoodday());		//优良天数
+				paramMap.put("daysize", or.getDaysize());		//总天数
+				paramMap.put("overday", "0");					//超标天数
+			}
+		} else {
+			paramMap.put("area", area);		//区域名称
+			paramMap.put("datetime", year);	//数据时间
+			paramMap.put("goodrate", "0.0");//优良率
+			paramMap.put("goodday", "0");	//优良天数
+			paramMap.put("daysize", "0");	//总天数
+			paramMap.put("overday", "0");	//超标天数
+		}
+		
+		return paramMap;
+	}
+
+
+	public List<OmRank> getAQICalendar(HttpServletRequest request){
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		//所属区域
+		String area = (request.getParameter("area") == null || "".equals(request.getParameter("area"))) ? "市南区" : request.getParameter("area");
+		//时间(格式：yyyy-MM)
+		String datetime = (request.getParameter("datetime") == null || "".equals(request.getParameter("datetime"))) ? new SimpleDateFormat("yyyy-MM").format(new Date()) : request.getParameter("datetime");
+		
+		paramMap.put("city", city);
+		paramMap.put("area", area);
+		paramMap.put("jbobjtypeid", "1,5");
+		
+		paramMap.put("begintime", datetime +"-01 00:00:00");
+		paramMap.put("endtime", getLastDayOfMonth(datetime));
+		paramMap.put("objtypeid", "2,6");
+		paramMap.put("dateformat", "yyyy-mm-dd");
+		paramMap.put("sitenameid", "2010001,6010001");
+		paramMap.put("sitenumberid", "2010002,6010002");
+		
+		List<OmRank> resultList = oneMapDao.omRankByArea(paramMap);
+		
+		return resultList;
+	}
+
+	
+	public List<OmRank> getAirGoodrate(HttpServletRequest request){
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		//所属区域
+		String area = (request.getParameter("area") == null || "".equals(request.getParameter("area"))) ? "市南区" : request.getParameter("area");
+		//时间(格式：yyyy)
+		String datetime = (request.getParameter("datetime") == null || "".equals(request.getParameter("datetime"))) ? new SimpleDateFormat("yyyy").format(new Date()) : request.getParameter("datetime");
+		
+		paramMap.put("city", city);
+		paramMap.put("area", area);
+		paramMap.put("jbobjtypeid", "1,5");
+		
+		paramMap.put("begintime", datetime +"-01-01 00:00:00");
+		paramMap.put("endtime", datetime +"-12-31 23:59:59");
+		paramMap.put("objtypeid", "2,6");
+		paramMap.put("dateformat", "yyyy-mm");
+		paramMap.put("sitenameid", "2010001,6010001");
+		paramMap.put("sitenumberid", "2010002,6010002");
+		paramMap.put("goodrate", "goodrate");
+		
+		List<OmRank> resultList = oneMapDao.omRankByArea(paramMap);
+		
+		return resultList;
+	}
+
+
+	public Map<String, Object> getAirAnalysis(HttpServletRequest request) {
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		
+		paramMap.put("city", city);
+		paramMap.put("jbobjtypeid", "1,5");
+		
+		String[] timetype = {"hour","day","month"};
+		
+		//获取数据库最大实时数据时间、最大日数据时间
+		String[] hourMaxTime = colMinMaxTimeByHour("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1,5");
+		String[] dayMaxTime = colMinMaxTimeByDay("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2,6");
+		
+		List<OmRank> hourRank = new ArrayList<OmRank>();
+		List<OmRank> dayRank = new ArrayList<OmRank>();
+		List<OmRank> monthRank = new ArrayList<OmRank>();
+		
+		//最新实时数据
+		if ("hour".equals(timetype[0])) {
+			paramMap.put("begintime", hourMaxTime[1]);
+			paramMap.put("endtime", hourMaxTime[1]);
+			paramMap.put("objtypeid", "1,5");
+			paramMap.put("dateformat", "yyyy年mm月dd日HH24时");
+			paramMap.put("sitenameid", "1010003,5010003");
+			paramMap.put("sitenumberid", "1010001,5010001");
+			paramMap.put("aqi", "aqi");
+			
+			hourRank = oneMapDao.omRankByArea(paramMap);
+		}
+		//最新日数据
+		if ("day".equals(timetype[1])) {
+			paramMap.put("begintime", dayMaxTime[0]);
+			paramMap.put("endtime", dayMaxTime[1]);
+			paramMap.put("objtypeid", "2,6");
+			paramMap.put("dateformat", "yyyy年mm月dd日");
+			paramMap.put("sitenameid", "2010001,6010001");
+			paramMap.put("sitenumberid", "2010002,6010002");
+			paramMap.put("aqi", "aqi");
+			
+			dayRank = oneMapDao.omRankByArea(paramMap);
+		}
+		//最新月优良率
+		if ("month".equals(timetype[2])) {
+			paramMap.put("begintime", dayMaxTime[1].substring(0, 7) +"-01 00:00:00");
+			paramMap.put("endtime", getLastDayOfMonth(dayMaxTime[1].substring(0, 7)));
+			paramMap.put("objtypeid", "2,6");
+			paramMap.put("dateformat", "yyyy年mm月");
+			paramMap.put("sitenameid", "2010001,6010001");
+			paramMap.put("sitenumberid", "2010002,6010002");
+			paramMap.put("goodrate", "goodrate");
+			
+			monthRank = oneMapDao.omRankByArea(paramMap);
+		}
+		
+		paramMap.clear();
+		
+		paramMap.put("hour", hourRank);
+		paramMap.put("day", dayRank);
+		paramMap.put("month", monthRank);
+		
+		return paramMap;
+	}
+
+
+	public Map<String, Object> getAreaSiteCount(HttpServletRequest request){
+		
+		Map<String, Object> map = new LinkedHashMap<String, Object>();
+		
+		//所属市
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		List<AreaSiteCount> asCount = countDao.getAreaSiteCount(city);
+		
+		int sitesum = 0;
+		for (AreaSiteCount as : asCount) {
+			sitesum += as.getSitenum();
+		}
+		
+		map.put("sitesum", sitesum);//站点总数
+		map.put("asCount", asCount);//区域站点列表
+		
+		return map;
+	}
+
+
+	/*区域报警次数：待完成*/
+	
+	
+	
+	
+	
+	
+	public List<OmRank> sitesAnalysis(HttpServletRequest request){
+		
+		//站点objids(多个用逗号隔开)
+		String objids = request.getParameter("objids") == null ? "" : request.getParameter("objids");
+		
+		//时间类型(数据类型：时,日:yyyy-MM-dd,月:yyyy-MM)
+		String timetype = (request.getParameter("timetype") == null || "".equals(request.getParameter("timetype"))) ? "时" : request.getParameter("timetype");
+		//开始时间
+		String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+		//结束时间
+		String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+		
+		//获取数据库最大实时数据时间
+		String[] hourMaxTime = colMinMaxTimeByHour("4", 0, objids, "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1");
+		
+		List<OmRank> resultList = new ArrayList<OmRank>();
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("objid", objids);
+		paramMap.put("jbobjtypeid", "1");
+		
+		String newdate = new SimpleDateFormat("yyyy-MM").format(new Date());
+		//判断时间类型
+		if ("时".equals(timetype)) {//时数据AQI
+			//判断时间是否为空
+			if ("".equals(begintime) && "".equals(endtime)) { //为空
+				begintime = hourMaxTime[1].substring(0, 10) + " 00:00:00";
+				endtime = hourMaxTime[1].substring(0, 10) + " 23:59:59";
+			} else {
+				begintime = begintime + " 00:00:00";
+				endtime = endtime + " 23:59:59";
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "1");
+			paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+			paramMap.put("sitenameid", "1010003");
+			paramMap.put("sitenumberid", "1010001");
+			paramMap.put("aqi", "aqi");
+			
+		} else if ("日".equals(timetype)){//日数据AQI
+			//判断时间是否为空
+			if ("".equals(begintime) && "".equals(endtime)) { //为空
+				begintime = newdate + "-01 00:00:00";
+				endtime = getLastDayOfMonth(newdate);
+			} else {
+				begintime = begintime + " 00:00:00";
+				endtime = endtime + " 23:59:59";
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "2");
+			paramMap.put("dateformat", "yyyy-mm-dd");
+			paramMap.put("sitenameid", "2010001");
+			paramMap.put("sitenumberid", "2010002");
+			paramMap.put("aqi", "aqi");
+			
+		} else {//月数据优良率
+			//判断时间是否为空
+			if ("".equals(begintime) && "".equals(endtime)) {
+				begintime = newdate + "-01 00:00:00";
+				endtime = getLastDayOfMonth(newdate);
+			} else {
+				begintime = begintime + "-01 00:00:00";
+				endtime = getLastDayOfMonth(endtime);
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "2");
+			paramMap.put("dateformat", "yyyy-mm");
+			paramMap.put("sitenameid", "2010001");
+			paramMap.put("sitenumberid", "2010002");
+			paramMap.put("goodrate", "goodrate");
+			
+		}
+		
+		resultList = oneMapDao.omRankBySite(paramMap);
+		
+		return resultList;
+	}
+
+	
+	public List<OmRank> sitePpAnalysis(HttpServletRequest request){
+		
+		//站点objid
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		
+		//时间类型(数据类型：日:yyyy-MM-dd,月:yyyy-MM)
+		String timetype = (request.getParameter("timetype") == null || "".equals(request.getParameter("timetype"))) ? "日" : request.getParameter("timetype");
+		//时间
+		String datetime = request.getParameter("datetime") == null ? "" : request.getParameter("datetime");
+		
+		//查询对应的日数据objid
+		String dayobjid = oneMapDao.getDayDataObjid(objid);
+		//获取数据库最大日数据时间
+		String[] dayMaxTime = colMinMaxTimeByHour("4", 0, dayobjid, "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2");
+		
+		List<OmRank> resultList = new ArrayList<OmRank>();
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("objid", objid);
+		paramMap.put("jbobjtypeid", "1");
+		paramMap.put("siteavg", "siteavg");
+		
+		String begintime = dayMaxTime[1];
+		String endtime = dayMaxTime[1];
+		
+		//判断时间类型
+		if ("日".equals(timetype)){//日数据AQI
+			//判断时间是否为空
+			if ("".equals(datetime)) { //为空
+				begintime = begintime.substring(0, 10) + " 00:00:00";
+				endtime = endtime.substring(0, 10) + " 23:59:59";
+			} else {
+				begintime = datetime + " 00:00:00";
+				endtime = datetime + " 23:59:59";
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "2");
+			paramMap.put("dateformat", "yyyy-mm-dd");
+			paramMap.put("sitenameid", "2010001");
+			paramMap.put("sitenumberid", "2010002");
+	
+		} else {//月均值
+			//判断时间是否为空
+			if ("".equals(datetime)) {
+				begintime = begintime.substring(0, 7) + "-01 00:00:00";
+				endtime = getLastDayOfMonth(endtime.substring(0, 7));
+			} else {
+				begintime = datetime + "-01 00:00:00";
+				endtime = getLastDayOfMonth(datetime);
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "2");
+			paramMap.put("dateformat", "yyyy-mm");
+			paramMap.put("sitenameid", "2010001");
+			paramMap.put("sitenumberid", "2010002");
+		}
+		resultList = oneMapDao.omRankBySite(paramMap);
+		
+		return resultList;
+	}
+	
+	
+	public Map<String, Object> siteAnalysis(HttpServletRequest request){
+		
+		//站点objid
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		//时间(格式:yyyy)
+		String datetime = (request.getParameter("datetime") == null || "".equals(request.getParameter("datetime"))) 
+				? new SimpleDateFormat("yyyy").format(new Date()) : request.getParameter("datetime");
+		
+		List<OmRank> thisyear = new ArrayList<OmRank>();//今年
+		List<OmRank> lastyear = new ArrayList<OmRank>();//去年
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("objid", objid);
+		paramMap.put("jbobjtypeid", "1");
+		paramMap.put("siteavg", "siteavg");
+		paramMap.put("objtypeid", "2");
+		paramMap.put("dateformat", "yyyy-mm");
+		paramMap.put("sitenameid", "2010001");
+		paramMap.put("sitenumberid", "2010002");
+		
+		paramMap.put("begintime", datetime + "-01-01 00:00:00");
+		paramMap.put("endtime", datetime + "-12-31 23:59:59");
+		thisyear = oneMapDao.omRankBySite(paramMap);
+		
+		paramMap.put("begintime", (Integer.parseInt(datetime)-1) + "-01-01 00:00:00");
+		paramMap.put("endtime", (Integer.parseInt(datetime)-1) + "-12-31 23:59:59");
+		lastyear = oneMapDao.omRankBySite(paramMap);
+		
+		paramMap.clear();
+		paramMap.put("thisyear", thisyear);
+		paramMap.put("lastyear", lastyear);
+		
+		return paramMap;
+	}
+
+
+	public List<OmRank> sitesHistory(HttpServletRequest request){
+		
+		//站点objids(多个用逗号隔开)
+		String objids = request.getParameter("objids") == null ? "" : request.getParameter("objids");
+		
+		//时间类型(数据类型：时:yyyy-MM-dd HH:mm:ss,日:yyyy-MM-dd)
+		String timetype = (request.getParameter("timetype") == null || "".equals(request.getParameter("timetype"))) ? "时" : request.getParameter("timetype");
+		//开始时间
+		String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+		//结束时间
+		String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+		
+		//获取数据库最大实时数据时间
+		String[] hourMaxTime = new String[2];
+		if ("".equals(begintime) && "".equals(endtime)) {
+			hourMaxTime = colMinMaxTimeByHour("4", 0, objids, "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1");
+		}	
+		
+		List<OmRank> resultList = new ArrayList<OmRank>();
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("objid", objids);
+		paramMap.put("jbobjtypeid", "1");
+		
+		String newdate = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+		
+		//判断时间类型
+		if ("时".equals(timetype)) {//时数据AQI
+			//判断时间是否为空
+			if ("".equals(begintime) && "".equals(endtime)) { //为空
+				begintime = hourMaxTime[1].substring(0, 10) + " 00:00:00";
+				endtime = hourMaxTime[1].substring(0, 10) + " 23:59:59";
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "1");
+			paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+			paramMap.put("sitenameid", "1010003");
+			paramMap.put("sitenumberid", "1010001");
+			
+		} else {//日数据AQI
+			//判断时间是否为空
+			if ("".equals(begintime) && "".equals(endtime)) { //为空
+				begintime = newdate + " 00:00:00";
+				endtime = newdate + " 23:59:59";
+			} else {
+				begintime = begintime + " 00:00:00";
+				endtime = endtime + " 23:59:59";
+			}
+			
+			paramMap.put("begintime", begintime);
+			paramMap.put("endtime", endtime);
+			paramMap.put("objtypeid", "2");
+			paramMap.put("dateformat", "yyyy-mm-dd");
+			paramMap.put("sitenameid", "2010001");
+			paramMap.put("sitenumberid", "2010002");			
+		}
+		
+		resultList = oneMapDao.omRankBySite(paramMap);
+		
+		return resultList;
+	}
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n小时)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param hour 小时
+	 * @param objid 对象id
+	 * @param paramid 参数id
+	 * @param objtypeid 对象类型id
+	 * @return {mintime,maxtime}
+	 * 
+	 * 空气质量paramid：1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9 -->
+	 * 空气质量objtypeid：实时数据(1,5),日数据(2,6) 
+	 */
+	private String[] colMinMaxTimeByHour(String devicetypeid, int hour, String objid, String paramid, String objtypeid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:MI:ss", devicetypeid, paramid, objtypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		Date date = new Date();
+		try {
+			if (maxtime != null && !"".equals(maxtime)) {
+					date = sdf.parse(maxtime);
+			} else {
+				maxtime = sdf.format(date);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.HOUR_OF_DAY, calendar.get(Calendar.HOUR_OF_DAY)-hour);//(maxtime-n小时)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime,maxtime};
+		
+		return times;
+	}
+
+
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n天)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param day 天
+	 * @param objid 对象id
+	 * @param paramid 参数id
+	 * @param objtypeid 对象类型id
+	 * @return {mintime,maxtime}
+	 * 
+	 * 空气质量paramid：1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9 -->
+	 * 空气质量objtypeid：实时数据(1,5),日数据(2,6)
+	 */
+	private String[] colMinMaxTimeByDay(String devicetypeid, int day, String objid, String paramid, String objtypeid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd", devicetypeid, paramid, objtypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		Date date = new Date();
+		try {
+			if (maxtime != null && !"".equals(maxtime)) {
+				date = sdf.parse(maxtime);
+			} else {
+				maxtime = sdf.format(date);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.DAY_OF_MONTH, calendar.get(Calendar.DAY_OF_MONTH)-day);//(maxtime-n天)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime + " 00:00:00",maxtime + " 23:59:59"};
+		
+		return times;
+	}
+	
+	
+	/**
+	 * 获取指定年月的最后一天
+	 * @param year
+	 * @param month
+	 * @return
+	 */
+	private static String getLastDayOfMonth(String yearmonth) {     
+	    if(!"".equals(yearmonth) && yearmonth.contains("-")){
+	    	String[] YMArr = yearmonth.split("-");
+	    	Calendar cal = Calendar.getInstance();     
+	        //设置年份  
+	        cal.set(Calendar.YEAR, Integer.parseInt(YMArr[0]));  
+	        //设置月份  
+	        cal.set(Calendar.MONTH, Integer.parseInt(YMArr[1])-1); 
+	        //获取某月最大天数
+	        int lastDay = cal.getActualMaximum(Calendar.DATE);
+	        //设置日历中月份的最大天数  
+	        cal.set(Calendar.DAY_OF_MONTH, lastDay);  
+	        //格式化日期
+	        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");  
+	        return sdf.format(cal.getTime())+" 23:59:59";
+	    }else{
+	    	return "";
+	    }
+	}
+
+}

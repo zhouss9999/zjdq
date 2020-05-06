@@ -1,0 +1,17 @@
+package wy.qingdao_atmosphere.mobile.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+
+public interface AirAppDao {
+	
+	//获取城市监测参数
+	public List<AirCollect> getAirSbyCity(Map<String, Object> map);
+	//获取站点监测参数 
+	public List<AirCollect> getAirSbyObjid(Map<String, Object> map);
+	//获取站点objid
+	public List<Integer> getSiteObjid(Map<String, Object> map);
+	
+}

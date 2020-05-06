@@ -1,0 +1,1018 @@
+package wy.qingdao_atmosphere.onemap.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.geotools.data.DataUtilities;
+import org.geotools.data.collection.ListFeatureCollection;
+import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.feature.SchemaException;
+import org.geotools.feature.simple.SimpleFeatureBuilder;
+import org.geotools.geojson.feature.FeatureJSON;
+import org.opengis.feature.simple.SimpleFeature;
+import org.opengis.feature.simple.SimpleFeatureType;
+
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.Point;
+import com.vividsolutions.jts.io.WKTReader;
+
+import java.io.StringWriter;
+import java.text.DecimalFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.math.RoundingMode;
+
+import javax.servlet.http.HttpServletRequest;
+
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.onemap.dao.OneMapDao;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+import wy.qingdao_atmosphere.onemap.domain.OmRank;
+import wy.qingdao_atmosphere.onemap.domain.PicInfo;
+import wy.util.DatapointsApiThreadUtil;
+import wy.util.datapersistence.SpaceInfo;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+
+@Service("oneMapService")
+public class OneMapServiceImpl implements OneMapService {
+
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private OneMapDao oneMapDao;
+
+
+	public List<OmMenu> getOmMenuList() {
+		//原始数据
+		List<OmMenu> rootlist = oneMapDao.getOmMenuList();
+		//创建list，存放最后的结果
+		List<OmMenu> menuList = new ArrayList<OmMenu>();
+		
+		if (rootlist.size() > 0) {
+			//先找到所有的一级目录
+			for (OmMenu menu : rootlist) {
+				//一级目录的父级目录id为'0'
+				if ("0".equals(menu.getParentid())) {
+					menuList.add(menu);
+				}
+			}
+			
+			//为一级目录设置子目录,getChild是递归调用的
+			for (OmMenu menu : menuList) {
+				menu.setChildList(getChild(String.valueOf(menu.getId()),rootlist));
+			}
+		}
+		
+		return menuList;
+	}
+
+	
+	/**
+	 * 递归查找子菜单
+	 * @param id 当前目录id
+	 * @param rootMenu 要查找的列表
+	 * @return childList
+	 */
+	private List<OmMenu> getChild(String id, List<OmMenu> rootMenu) {
+	    //子目录
+	    List<OmMenu> childList = new ArrayList<OmMenu>();
+	    for (OmMenu menu : rootMenu) {
+	        // 遍历所有节点，将父目录id与传过来的id比较
+	        if (!("0".equals(menu.getParentid()))) {
+	            if (menu.getParentid().equals(id)) {
+	                childList.add(menu);
+	            }
+	        }
+	    }
+	    // 把子目录的子目录再循环一遍
+	    for (OmMenu menu : childList) {
+            // 递归
+            menu.setChildList(getChild(String.valueOf(menu.getId()), rootMenu));
+	    } 
+	    // 递归退出条件
+	    if (childList.size() == 0) {
+	        return new ArrayList<OmMenu>();
+	    }
+	    return childList;
+	}
+	
+	
+	public List<KqzlColl> getOmAllSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap) {
+		
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		
+		paramMap.put("objid", objid);
+		paramMap.put("objtypeid", "1,5");
+		
+		if (paramMap.containsKey("history")) {
+			//时间格式：yyyy-MM-dd
+			String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+			String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+			
+			if ("".equals(begintime) && "".equals(endtime)) {
+				paramMap.put("recently", "24 hour");
+				paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+				paramMap.put("sitenumberid", "1010001,5010001");
+			} else {
+				if (!"".equals(begintime) && !"".equals(endtime)) {
+					if ((begintime).equals(endtime)) {//同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+						paramMap.put("sitenumberid", "1010001,5010001");
+					} else {//不同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd");
+						paramMap.put("sitenumberid", "2010002,6010002");
+					}
+				} else {
+					if (!"".equals(begintime)) {
+						begintime = begintime +" 00:00:00";
+					}
+					if (!"".equals(endtime)) {
+						endtime = endtime +" 23:59:59";
+					}
+					
+					paramMap.put("begintime", begintime);
+					paramMap.put("endtime", endtime);
+					paramMap.put("dateformat", "yyyy-mm-dd");
+					paramMap.put("sitenumberid", "2010002,6010002");
+				}
+			}
+		}
+		
+		List<KqzlColl> kqzlList = oneMapDao.getOmAllSiteDatas(paramMap);
+		
+		return kqzlList;
+	}
+
+
+	public StringWriter getOmSiteGeom(HttpServletRequest request, String mark) {
+		
+		//给出默认值:默认给国站的
+		int objtypeid = 5;
+		//空间表名
+		String space_tablename = "space_countrysite";
+		
+		if ("wz".equals(mark)) {						//微站
+			objtypeid = 1;
+			space_tablename = "space_site";
+		} else if ("fs".equals(mark)) {					//辐射站
+			objtypeid = 12;
+			space_tablename = "space_wbstation";
+		} else if ("tk".equals(mark)) {					//探空站
+			objtypeid = 11;
+			space_tablename = "space_cityaircurve";
+		}	
+		
+		//传参Map
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		
+		paramMap.put("objtypeid", objtypeid);
+		
+		/**========================================请求参数=========================================================*/
+		//行政区域(多个用逗号隔开)
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		//微站监测类型(多个用逗号隔开)
+		String monitortypes = request.getParameter("monitortype") == null ? "" : request.getParameter("monitortype");
+		String monitortype = "";
+		if (!"".equals(monitortypes)) {
+			for (int i = 0; i < monitortypes.split(",").length; i++) {
+				if (i != monitortypes.split(",").length - 1) {
+					monitortype += "'"+ monitortypes.split(",")[i] + "',";
+				} else {
+					monitortype += "'"+ monitortypes.split(",")[i] + "'";
+				}
+			}		
+		}
+		
+		//站点objid(多个用逗号隔开)
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		/**======================================================================================================*/
+		
+		paramMap.put("city", city);
+		paramMap.put("monitortype", monitortype);
+		paramMap.put("objid", objid);
+		
+		//站点空间位置信息列表(list转map，优化程序)
+		List<SpaceInfo> siteGeomList = baseService.getGeomList(space_tablename,objid);
+		Map<Integer, String> siteGeomMap = new LinkedHashMap<Integer, String>();
+		if (siteGeomList.size() > 0) {
+			for (SpaceInfo spaceInfo : siteGeomList) {
+				siteGeomMap.put(spaceInfo.getObjid(), spaceInfo.getShape());
+			}
+		}
+		
+		StringWriter writer = new StringWriter();
+		
+		try {
+			SimpleFeatureType TYPE = null;
+			if ("fs".equals(mark)) {//辐射站点坐标信息
+				TYPE = DataUtilities.createType("Link", "geometry:Point,objid:Integer,sitenumber:String,"
+						+ "sitename:String,province:String,city:String,county:String,address:String," 
+						+ "lon:String,lat:String,altitude:String"
+				);
+				//站点信息列表
+				List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(paramMap, "getOmObjInfoList");
+				
+				writer = getSiteGeoJson(TYPE, siteList, siteGeomMap);
+				
+			} else if ("tk".equals(mark)) {//探空曲线坐标信息
+				TYPE = DataUtilities.createType("Link", "geometry:Point,objid:Integer,identifier:String,"
+						+ "stationnumber:String,latitude:String,longitude:String,sitename:String,"
+						+ "province:String,city:String,county:String,address:String" 
+				);
+				List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(paramMap, "getOmObjInfoList");
+				
+				writer = getSiteGeoJson(TYPE, siteList, siteGeomMap);
+				
+			}else {//国站微站坐标信息
+				paramMap.put("recently", "1 second");
+				paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");		
+				
+				List<KqzlColl> siteList = new ArrayList<KqzlColl>();
+				if ("wz".equals(mark)) {
+					paramMap.put("sitenumberid", "1010001");
+					siteList = oneMapDao.getOmAllSiteDatas(paramMap);
+				} else {
+					paramMap.put("sitenumberid", "5010001");
+					siteList = oneMapDao.getOmAllSiteDatas(paramMap);
+				}
+				
+				TYPE = DataUtilities.createType("Link", "geometry:Point,objid:Integer,sitenumber:String,"
+						+ "sitetype:String,sitename:String,monitortype:String," 
+				        + "province:String,city:String,county:String,address:String,"
+						+ "lon:String,lat:String,device:String,issite:String,collecttime:String,aqi:String,"
+						+ "pm25:String,pm10:String,co:String,no2:String,so2:String,o3:String,o38:String,voc:String," 
+						+ "pollutant:String,quality:String"
+				);
+				writer = getSitesGeoJson(TYPE, siteList, siteGeomMap);
+			}
+		} catch (SchemaException e) {
+			e.printStackTrace();
+		}
+		
+		
+		return writer;
+	}
+	
+
+	public List<KqzlColl> getOmGzSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap) {
+		
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		
+		paramMap.put("objid", objid);
+		paramMap.put("objtypeid", "5");
+		
+		if (paramMap.containsKey("history")) {
+			//时间格式：yyyy-MM-dd
+			String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+			String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+			
+			if ("".equals(begintime) && "".equals(endtime)) {
+				paramMap.put("recently", "24 hour");
+				paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+				paramMap.put("sitenumberid", "5010001");
+			} else {
+				if (!"".equals(begintime) && !"".equals(endtime)) {
+					if ((begintime).equals(endtime)) {//同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+						paramMap.put("sitenumberid", "5010001");
+					} else {//不同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd");
+						paramMap.put("sitenumberid", "6010002");
+					}
+				} else {
+					if (!"".equals(begintime)) {
+						begintime = begintime +" 00:00:00";
+					}
+					if (!"".equals(endtime)) {
+						endtime = endtime +" 23:59:59";
+					}
+					
+					paramMap.put("begintime", begintime);
+					paramMap.put("endtime", endtime);
+					paramMap.put("dateformat", "yyyy-mm-dd");
+					paramMap.put("sitenumberid", "6010002");
+				}
+			}
+		}
+		
+		List<KqzlColl> kqzlList = oneMapDao.getOmAllSiteDatas(paramMap);
+		
+		return kqzlList;
+	}
+	
+	
+	public List<KqzlColl> getOmWzSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap) {
+		
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		
+		paramMap.put("objid", objid);
+		paramMap.put("objtypeid", "1");
+		
+		if (paramMap.containsKey("history")) {
+			//时间格式：yyyy-MM-dd
+			String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+			String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+			
+			if ("".equals(begintime) && "".equals(endtime)) {
+				paramMap.put("recently", "24 hour");
+				paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+				paramMap.put("sitenumberid", "1010001");
+			} else {
+				if (!"".equals(begintime) && !"".equals(endtime)) {
+					if ((begintime).equals(endtime)) {//同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+						paramMap.put("sitenumberid", "1010001");
+					} else {//不同一天
+						begintime = begintime +" 00:00:00";
+						endtime = endtime +" 23:59:59";
+						
+						paramMap.put("begintime", begintime);
+						paramMap.put("endtime", endtime);
+						paramMap.put("dateformat", "yyyy-mm-dd");
+						paramMap.put("sitenumberid", "2010002");
+					}
+				} else {
+					if (!"".equals(begintime)) {
+						begintime = begintime +" 00:00:00";
+					}
+					if (!"".equals(endtime)) {
+						endtime = endtime +" 23:59:59";
+					}
+					
+					paramMap.put("begintime", begintime);
+					paramMap.put("endtime", endtime);
+					paramMap.put("dateformat", "yyyy-mm-dd");
+					paramMap.put("sitenumberid", "2010002");
+				}
+			}
+		}
+		
+		List<KqzlColl> kqzlList = oneMapDao.getOmAllSiteDatas(paramMap);
+		
+		return kqzlList;
+	}
+
+
+	public Map<String, Object> omFsData(HttpServletRequest request,String datastreamIds, String paramid) {
+		
+		//必传
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "0" : request.getParameter("objid");
+		
+		//获取数据库辐射数据近72小时时间
+		String[] colMinMaxTime = colMinMaxTimeByHour("5", 72, objid, paramid, "");
+		
+		//按时间查询 格式：yyyy-MM-dd
+		String begintime = (request.getParameter("begintime") == null || "".equals(request.getParameter("begintime"))) ? colMinMaxTime[0] : request.getParameter("begintime") +" 00:00:00";
+		String endtime = (request.getParameter("endtime") == null || "".equals(request.getParameter("endtime"))) ? colMinMaxTime[1] : request.getParameter("endtime") +" 23:59:59";
+		
+		Map<String, Object> resultMap = getDataMap("5", objid, datastreamIds, begintime, endtime, null);
+		
+		return resultMap;
+	}
+	
+	
+	public Map<String, Object> omFsDataSecond(HttpServletRequest request,String datastreamIds, String paramid) {
+		
+		//必传
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "0" : request.getParameter("objid");
+		
+		//获取数据库辐射数据近1小时时间
+		String[] colMinMaxTime = colMinMaxTimeByHour("5", 1, objid, paramid, "");
+		
+		//按时间查询 格式：yyyy-MM-dd HH:mm:ss
+		String begintime = (request.getParameter("begintime") == null || "".equals(request.getParameter("begintime"))) ? colMinMaxTime[0] : request.getParameter("begintime");
+		String endtime = (request.getParameter("endtime") == null || "".equals(request.getParameter("endtime"))) ? colMinMaxTime[1] : request.getParameter("endtime");
+		
+		Map<String, Object> resultMap = getDataMap("5", objid, datastreamIds, begintime, endtime, null);
+		
+		return resultMap;
+	}
+
+	public StringWriter getOmAllSiteGeom(HttpServletRequest request, String mark) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");	
+		
+		//获取所有站点坐标(空间表)
+		String space_table = "space_site union select objid,id,st_AsText(shape) shape from space_countrysite";
+		
+		if ("wx".equals(mark)) {
+			space_table = "space_satellite";
+		}
+		List<SpaceInfo> siteGeomList = baseService.getGeomList(space_table, objid);
+		Map<Integer, String> siteGeomMap = new LinkedHashMap<Integer, String>();
+		if (siteGeomList.size() > 0) {
+			for (SpaceInfo spaceInfo : siteGeomList) {
+				siteGeomMap.put(spaceInfo.getObjid(), spaceInfo.getShape());
+			}
+		}
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("city", city);
+		paramMap.put("objid", objid);
+		StringWriter writer = new StringWriter();
+		
+		if ("rd".equals(mark)) {//热点分析
+			paramMap.put("recently", "30 day");
+			paramMap.put("dateformat", "yyyy-mm-dd");
+			paramMap.put("objtypeid", "1,5");
+			paramMap.put("sitenumberid", "2010002,6010002");
+			
+			//各个站点近30天的优良率及监测参数均值
+			List<Map<String, Object>> siteList = oneMapDao.getOmAllSiteGoodRate(paramMap);
+			
+			for (Map<String, Object> map : siteList) {
+				System.out.println(map);
+			}
+			
+			try {
+				SimpleFeatureType TYPE = DataUtilities.createType("Link", 
+						  "geometry:Point,objid:Integer,sitenumber:String,"
+						+ "sitetype:String,sitename:String,monitortype:String," 
+				        + "province:String,city:String,county:String,address:String,"
+						+ "lon:String,lat:String,device:String,issite:String,aqi:String,"
+						+ "pm25:String,pm10:String,co:String,no2:String,so2:String,o3:String," 
+						+ "o38:String,voc:String,goodday:String,daysize:String,goodrate:String"
+				);
+				
+				writer = getSiteGeoJson(TYPE, siteList, siteGeomMap);
+				
+			} catch (SchemaException e) {
+				e.printStackTrace();
+			}
+		} else if ("wx".equals(mark)){//卫星云图
+			paramMap.put("objtypeid", "13");
+			//站点基本信息列表
+			List<Map<String,Object>> siteList = baseService.selectForCpAttachInfoStoreTwo(paramMap, "getOmObjInfoList");
+			
+			try {
+				SimpleFeatureType TYPE = DataUtilities.createType("Link", 
+						  "geometry:Point,objid:Integer,sitenumber:String,"
+						+ "sitename:String,province:String,city:String,county:String," 
+						+ "address:String,lon:String,lat:String"
+				);
+				
+				writer = getSiteGeoJson(TYPE, siteList, siteGeomMap);
+				
+			} catch (SchemaException e) {
+				e.printStackTrace();
+			}
+		} else {//精细化,搜索
+			paramMap.put("recently", "1 second");
+			paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+			paramMap.put("objtypeid", "1,5");
+			paramMap.put("sitenumberid", "1010001,5010001");
+			
+			//各个站点最新的监测数据
+			List<KqzlColl> siteList = oneMapDao.getOmAllSiteDatas(paramMap);
+			try {
+				SimpleFeatureType TYPE = DataUtilities.createType("Link", 
+						  "geometry:Point,objid:Integer,sitenumber:String,"
+					    + "sitetype:String,sitename:String,monitortype:String," 
+				        + "province:String,city:String,county:String,address:String,"
+						+ "lon:String,lat:String,device:String,issite:String,collecttime:String,aqi:String,"
+						+ "pm25:String,pm10:String,co:String,no2:String,so2:String,o3:String," 
+						+ "o38:String,voc:String,pollutant:String,quality:String"
+				);
+				
+				writer = getSitesGeoJson(TYPE, siteList, siteGeomMap);
+				
+			} catch (SchemaException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		return writer;
+	}
+
+
+	public List<Map<String, Object>> getOmPicList(HttpServletRequest request, String objtypeid) {
+		
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		String begintime = request.getParameter("begintime") == null ? "" : request.getParameter("begintime");
+		String endtime = request.getParameter("endtime") == null ? "" : request.getParameter("endtime");
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("objtypeid", objtypeid);
+		paramMap.put("objid", objid);
+		paramMap.put("begintime", begintime);
+		paramMap.put("endtime", endtime);
+		if ("".equals(begintime) || "".equals(endtime)) {
+			paramMap.put("notime", "24 hour");
+		} else {
+			paramMap.put("yestime", "yestime");
+		}
+		
+		List<Map<String, Object>> siteDetail = baseService.selectDetailForCpAttachInfoStoreTwo(Integer.parseInt(objid));
+		
+		for (int i = 0; i < siteDetail.size(); i++) {
+			paramMap.put("objid", siteDetail.get(i).get("objid").toString());
+			//查询图片信息
+			List<PicInfo> picInfoList = oneMapDao.getPicInfoList(paramMap);
+			siteDetail.get(i).put("picInfoList", picInfoList);
+		}
+		
+		return siteDetail;
+	}
+
+
+	public Map<String, Object> getOmSiteYll(HttpServletRequest request) {
+		
+		//必传
+		String objid = request.getParameter("objid") == null ? "" : request.getParameter("objid");
+		
+		Map<String, Object> paramMap = new LinkedHashMap<String, Object>();
+		paramMap.put("recently", "30 day");
+		paramMap.put("dateformat", "yyyy-mm-dd");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("objid", objid);
+		paramMap.put("sitenumberid", "2010002,6010002");
+		
+		//近day天的监测数据
+		List<KqzlColl> daylist = oneMapDao.getOmAllSiteDatas(paramMap);
+		
+		int good = 0;
+		int size = daylist.size();
+		if (daylist.size() > 0) {
+			for (KqzlColl kc : daylist) {
+				if ("优".equals(kc.getQuality()) || "良".equals(kc.getQuality())) {
+					good += 1;
+				}
+			}
+		} else {
+			size = 1;
+		}
+		
+		DecimalFormat df = new DecimalFormat("#0.0");//保留一位小数(奇进偶舍)
+		df.setRoundingMode(RoundingMode.HALF_UP);//四舍五入
+		
+		paramMap.clear();
+		paramMap.put("goodday", good);//优良天数
+		paramMap.put("goodrate", df.format(((double)good/size)*100));//优良率
+		paramMap.put("daydata", daylist);//近day天的空气质量监测值
+		
+		return paramMap;
+	}
+
+
+	public List<OmRank> omRankBySite(HttpServletRequest request, String timetype) {
+		
+		//默认显示实时数据
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		paramMap.put("city", city);
+		//paramMap.put("objtypeid", "1,5");//国站微站
+		paramMap.put("objtypeid", "1");//微站
+		
+		//时间
+		String datetime = (request.getParameter("datetime") == null) ? "" : request.getParameter("datetime");
+		
+		String[] hourMaxTime = new String[2];
+		String[] dayMaxTime = new String[2];
+		if ("".equals(datetime)) {
+			//获取微站数据库最大时间
+			hourMaxTime = colMinMaxTimeByHour("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1");
+			dayMaxTime = colMinMaxTimeByDay("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2");
+			/*//获取国站微站数据库最大时间
+			hourMaxTime = colMinMaxTimeByHour("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1,5");
+			dayMaxTime = colMinMaxTimeByDay("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2,6");*/
+		}
+		
+		//创建返回对象
+		List<OmRank> ranks = new ArrayList<OmRank>();
+		
+		if ("day".equals(timetype)) {				//日AQI排名
+			//时间格式：yyyy-MM-dd
+			if ("".equals(datetime)) {
+				paramMap.put("begintime", dayMaxTime[0]);
+				paramMap.put("endtime", dayMaxTime[1]);
+			} else {
+				paramMap.put("begintime", datetime +" 00:00:00");
+				paramMap.put("endtime", datetime +" 23:59:59");
+			}
+			
+			paramMap.put("dateformat", "yyyy-mm-dd");
+			//paramMap.put("sitenumberid", "2010002,6010002");//国站微站
+			paramMap.put("sitenumberid", "2010002");//微站
+			paramMap.put("aqi", "aqi");
+			
+			ranks = oneMapDao.omRankBySite(paramMap);
+			
+		} else if ("month".equals(timetype)) {		//月优良率排名
+			//时间格式：yyyy-MM
+			if ("".equals(datetime)) {
+				paramMap.put("begintime", dayMaxTime[1].substring(0, 7) +"-01 00:00:00");
+				paramMap.put("endtime", getLastDayOfMonth(dayMaxTime[1].substring(0, 7)));
+			} else {
+				paramMap.put("begintime", datetime +"-01 00:00:00");
+				paramMap.put("endtime", getLastDayOfMonth(datetime));
+			}
+			
+			paramMap.put("dateformat", "yyyy-mm");
+			//paramMap.put("sitenumberid", "2010002,6010002");//国站微站
+			paramMap.put("sitenumberid", "2010002");//微站
+			paramMap.put("goodrate", "goodrate");
+			
+			ranks = oneMapDao.omRankBySite(paramMap);
+			
+		} else {									//实时AQI排名
+			//时间格式：yyyy-MM-dd HH
+			if ("".equals(datetime)) {
+				paramMap.put("begintime", hourMaxTime[1]);
+				paramMap.put("endtime", hourMaxTime[1]);
+			} else {
+				paramMap.put("begintime", datetime +":00:00");
+				paramMap.put("endtime", datetime +":00:00");
+			}
+			
+			paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+			//paramMap.put("sitenumberid", "1010001,5010001");//国站微站
+			paramMap.put("sitenumberid", "1010001");//微站
+			paramMap.put("aqi", "aqi");
+			
+			ranks = oneMapDao.omRankBySite(paramMap);
+		}
+		
+		return ranks;
+	}
+
+
+	public List<OmRank> omRankByArea(HttpServletRequest request, String timetype) {
+		
+		//默认显示实时数据
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛" : request.getParameter("city");
+		
+		paramMap.put("city", city);
+		//paramMap.put("objtypeid", "1,5");//国站微站
+		paramMap.put("objtypeid", "1");//微站
+		
+		String datetime = (request.getParameter("datetime") == null) ? "" : request.getParameter("datetime");
+		
+		String[] hourMaxTime = new String[2];
+		String[] dayMaxTime = new String[2];
+		if ("".equals(datetime)) {
+			//获取微站数据库最大时间
+			hourMaxTime = colMinMaxTimeByHour("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1");
+			dayMaxTime = colMinMaxTimeByDay("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2");
+			/*//获取国站微站数据库最大时间
+			hourMaxTime = colMinMaxTimeByHour("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "1,5");
+			dayMaxTime = colMinMaxTimeByDay("1,4", 0, "", "1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9", "2,6");*/
+		}
+		
+		//创建返回对象
+		List<OmRank> ranks = new ArrayList<OmRank>();
+		
+		if ("day".equals(timetype)) {			//日AQI排名
+			//时间格式：yyyy-MM-dd
+			if ("".equals(datetime)) {
+				paramMap.put("begintime", dayMaxTime[0]);
+				paramMap.put("endtime", dayMaxTime[1]);
+			} else {
+				paramMap.put("begintime", datetime +" 00:00:00");
+				paramMap.put("endtime", datetime +" 23:59:59");
+			}
+			
+			paramMap.put("dateformat", "yyyy-mm-dd");
+			//paramMap.put("sitenumberid", "2010002,6010002");//国站微站
+			paramMap.put("sitenumberid", "2010002");//微站
+			paramMap.put("aqi", "aqi");
+			
+			ranks = oneMapDao.omRankByArea(paramMap);
+			
+		} else if ("month".equals(timetype)) { //月优良率排名
+			//时间格式：yyyy-MM
+			if ("".equals(datetime)) {
+				paramMap.put("begintime", dayMaxTime[1].substring(0, 7) +"-01 00:00:00");
+				paramMap.put("endtime", getLastDayOfMonth(dayMaxTime[1].substring(0, 7)));
+			} else {
+				paramMap.put("begintime", datetime +"-01 00:00:00");
+				paramMap.put("endtime", getLastDayOfMonth(datetime));
+			}
+			
+			paramMap.put("dateformat", "yyyy-mm");
+			//paramMap.put("sitenumberid", "2010002,6010002");//国站微站
+			paramMap.put("sitenumberid", "2010002");//微站
+			paramMap.put("goodrate", "goodrate");
+			
+			ranks = oneMapDao.omRankByArea(paramMap);
+			
+		} else {					//实时AQI排名
+			//时间格式：yyyy-MM-dd HH
+			if ("".equals(datetime)) {
+				paramMap.put("begintime", hourMaxTime[1]);
+				paramMap.put("endtime", hourMaxTime[1]);
+			} else {
+				paramMap.put("begintime", datetime +":00:00");
+				paramMap.put("endtime", datetime +":00:00");
+			}
+			
+			paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+			//paramMap.put("sitenumberid", "1010001,5010001");//国站微站
+			paramMap.put("sitenumberid", "1010001");//微站
+			paramMap.put("aqi", "aqi");
+			
+			ranks = oneMapDao.omRankByArea(paramMap);
+			
+		}
+		
+		return ranks;
+	}
+
+	
+	/**
+	 * 站点列表及坐标信息转换为geoJson格式
+	 * 
+	 * @param TYPE:定义坐标系及字段
+	 * @param siteList:站点基本信息列表
+	 * @param siteGeomMap:站点坐标列表
+	 * 
+	 * @return writer
+	 */
+	private StringWriter getSiteGeoJson(SimpleFeatureType TYPE, List<Map<String,Object>> siteList, Map<Integer, String> siteGeomMap) {
+		
+		StringWriter writer = new StringWriter();
+		try {
+			SimpleFeatureBuilder featureBuilder = new SimpleFeatureBuilder(TYPE);
+			GeometryFactory geometryFactory = new GeometryFactory();
+			WKTReader reader = new WKTReader(geometryFactory);
+			FeatureJSON fjson = new FeatureJSON();
+			List<SimpleFeature> features = new ArrayList<SimpleFeature>();
+			SimpleFeatureCollection collection = new ListFeatureCollection(TYPE, features);
+			
+			if (siteList.size() > 0) {
+				for (int i = 0; i < siteList.size(); i++) {
+					Map<String, Object> siteMap = siteList.get(i);
+					
+					int geoMapKey = Integer.parseInt(siteMap.get("objid").toString());
+					if (siteGeomMap.containsKey(geoMapKey)) {
+						
+						Point point = (Point)reader.read(siteGeomMap.get(geoMapKey));
+						featureBuilder.add(point);//坐标
+						
+						for(Map.Entry<String, Object> entry : siteMap.entrySet()){
+							if ("objid".equals(entry.getKey())) {
+								featureBuilder.add(geoMapKey);//objid
+							} else {
+								featureBuilder.add(entry.getValue().toString());
+							}
+				        }
+						
+						SimpleFeature feature = featureBuilder.buildFeature(null);
+						
+						features.add(feature);
+						
+					}
+				} 
+			}
+			
+			fjson.writeFeatureCollection(collection, writer);
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (com.vividsolutions.jts.io.ParseException e) {
+			e.printStackTrace();
+		}
+		
+		return writer;
+	}
+	
+	
+	/**
+	 * 站点列表及坐标信息转换为geoJson格式
+	 * 
+	 * @param TYPE:定义坐标系及字段
+	 * @param siteList:站点基本信息+监测数据列表
+	 * @param siteGeomMap:站点坐标列表
+	 * 
+	 * @return writer
+	 */
+	private StringWriter getSitesGeoJson(SimpleFeatureType TYPE, List<KqzlColl> siteList, Map<Integer, String> siteGeomMap) {
+		
+		StringWriter writer = new StringWriter();
+		try {
+			SimpleFeatureBuilder featureBuilder = new SimpleFeatureBuilder(TYPE);
+			GeometryFactory geometryFactory = new GeometryFactory();
+			WKTReader reader = new WKTReader(geometryFactory);
+			FeatureJSON fjson = new FeatureJSON();
+			List<SimpleFeature> features = new ArrayList<SimpleFeature>();
+			SimpleFeatureCollection collection = new ListFeatureCollection(TYPE, features);
+			
+			if (siteList.size() > 0) {
+				for (int i = 0; i < siteList.size(); i++) {
+					KqzlColl site = siteList.get(i);
+					int geoMapKey = site.getObjid();
+					
+					if (siteGeomMap.containsKey(geoMapKey)) {
+						
+						Point point = (Point)reader.read(siteGeomMap.get(geoMapKey));
+						featureBuilder.add(point);//坐标
+						
+						for (Field field : site.getClass().getDeclaredFields()) {
+						    field.setAccessible(true);
+						    featureBuilder.add(field.get(site));
+						}
+						
+						SimpleFeature feature = featureBuilder.buildFeature(null);
+						
+						features.add(feature);
+						
+					}
+				} 
+			}
+			
+			fjson.writeFeatureCollection(collection, writer);
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (com.vividsolutions.jts.io.ParseException e) {
+			e.printStackTrace();
+		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			e.printStackTrace();
+		}
+		
+		return writer;
+	}
+	
+	
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n小时)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param hour 小时
+	 * @param objid 对象id
+	 * @param paramid 参数id
+	 * @param objtypeid 对象类型id
+	 * @return {mintime,maxtime}
+	 * 
+	 * 空气质量paramid：1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9 -->
+	 * 空气质量objtypeid：实时数据(1,5),日数据(2,6) 
+	 */
+	private String[] colMinMaxTimeByHour(String devicetypeid, int hour, String objid, String paramid, String objtypeid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:MI:ss", devicetypeid, paramid, objtypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		Date date = new Date();
+		try {
+			if (maxtime != null && !"".equals(maxtime)) {
+					date = sdf.parse(maxtime);
+			} else {
+				maxtime = sdf.format(date);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.HOUR_OF_DAY, calendar.get(Calendar.HOUR_OF_DAY)-hour);//(maxtime-n小时)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime,maxtime};
+		
+		return times;
+	}
+	
+	
+	/**
+	 * 获取数据库监测数据最大时间(maxtime)和(maxtime-n天)的时间
+	 * @param devicetypeid 设备类型id
+	 * @param day 天
+	 * @param objid 对象id
+	 * @param paramid 参数id
+	 * @param objtypeid 对象类型id
+	 * @return {mintime,maxtime}
+	 * 
+	 * 空气质量paramid：1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9 -->
+	 * 空气质量objtypeid：实时数据(1,5),日数据(2,6)
+	 */
+	private String[] colMinMaxTimeByDay(String devicetypeid, int day, String objid, String paramid, String objtypeid){
+		//起始时间
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd", devicetypeid, paramid, objtypeid, objid);
+		//获取最大时间往前hour小时的时间
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+		Date date = new Date();
+		try {
+			if (maxtime != null && !"".equals(maxtime)) {
+				date = sdf.parse(maxtime);
+			} else {
+				maxtime = sdf.format(date);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.DAY_OF_MONTH, calendar.get(Calendar.DAY_OF_MONTH)-day);//(maxtime-n天)的时间
+		String mintime = sdf.format(calendar.getTime());
+		
+		String[] times = {mintime + " 00:00:00",maxtime + " 23:59:59"};
+		
+		return times;
+	}
+	
+	
+	/**
+     * 获取指定年月的最后一天
+     * @param year
+     * @param month
+     * @return
+     */
+    private static String getLastDayOfMonth(String yearmonth) {     
+        if(!"".equals(yearmonth) && yearmonth.contains("-")){
+        	String[] YMArr = yearmonth.split("-");
+	    	Calendar cal = Calendar.getInstance();     
+	        //设置年份  
+	        cal.set(Calendar.YEAR, Integer.parseInt(YMArr[0]));  
+	        //设置月份  
+	        cal.set(Calendar.MONTH, Integer.parseInt(YMArr[1])-1); 
+	        //获取某月最大天数
+	        int lastDay = cal.getActualMaximum(Calendar.DATE);
+	        //设置日历中月份的最大天数  
+	        cal.set(Calendar.DAY_OF_MONTH, lastDay);  
+	        //格式化日期
+	        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");  
+	        return sdf.format(cal.getTime())+" 23:59:59";
+        }else{
+        	return "";
+        }
+    }
+    
+	
+	/**
+	 * 数据点查询(单个站点)
+	 * @param devicetypeid:设备类型id,String
+	 * @param objid:对象id,String
+	 * @param datastreamids:查询的数据流，多个数据流之间用逗号分隔（可选）,String
+	 * @param startTime:提取数据点的开始时间（可选）,String
+	 * @param endTime:提取数据点的结束时间（可选）,String
+	 * @param cursor:指定本次请求继续从cursor位置开始提取数据（可选）,String
+	 * 
+	 * @return dataMap
+	 */
+	private Map<String, Object> getDataMap(String devicetypeid, String objid, String datastreamIds, String startTime, String endTime,String cursor){
+		
+		//传参map
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("devicetypeid", devicetypeid);
+		paramMap.put("objid", objid);
+		ParamAssis dk = oneMapDao.getDevidKey(paramMap);
+		
+		//用于存放数据返回
+		Map<String, Object> dataMap = new LinkedHashMap<String, Object>();
+		
+		dataMap = DatapointsApiThreadUtil.getDatapointsApi(datastreamIds, dk.getDevicenumber(), dk.getRmk1(), 
+				startTime, endTime, cursor, "DESC", dataMap);
+		
+		return dataMap;
+	}
+     
+
+}

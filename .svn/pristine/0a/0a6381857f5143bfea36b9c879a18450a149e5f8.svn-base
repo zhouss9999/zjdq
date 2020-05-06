@@ -1,0 +1,370 @@
+package wy.qingdao_atmosphere.reportform.web;
+
+import java.text.DateFormat;
+import java.text.DecimalFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.qingdao_atmosphere.reportform.service.ReportformService;
+import wy.util.AirBean;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+@Controller
+public class ReportformController {
+
+	@Autowired
+	private BaseaddDao baseaddDao;
+
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private ReportformService reportformService;
+	
+	/**
+	 * 查询微站站点
+	 * @param request
+	 * @return
+	 */
+	@RequestMapping(value = "/getwz.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> getwz(HttpServletRequest request){
+		String objtypeid = request.getParameter("objtypeid") == null?"":request.getParameter("objtypeid").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objtypeid", objtypeid);
+		List<Map<String,Object>> list = reportformService.getwz(map);
+		HashSet<Map<String,Object>> h = new HashSet<Map<String,Object>>();
+		for(Map<String,Object> m:list){
+			m.remove("devicename");
+			m.remove("devicenumber");
+			m.remove("rmk1");
+			m.remove("objtypeid");
+			h.add(m);
+		}
+		list.clear();
+		list.addAll(h);
+		return list;
+	}
+	
+	//微站小时数据和日数据查询
+	@RequestMapping(value = "/queryrealTime.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> queryrealTime(HttpServletRequest request) throws Exception{
+		Logger.getLogger("").info("业务报表 微站小时数据和日数据查询");
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		String objtypeid = request.getParameter("objtypeid") == null?"":request.getParameter("objtypeid").toString();
+		String begintime = request.getParameter("begintime") == null?"":request.getParameter("begintime").toString();
+		String endtime = request.getParameter("endtime") == null?"":request.getParameter("endtime").toString();
+		if(begintime.equals("")&&endtime.equals("")){
+			SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd HH:00:00");
+			String time = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:00:00", "4", "9", objtypeid, "");
+			endtime = time;
+			Calendar calendartime = Calendar.getInstance();
+			calendartime.setTime(f.parse(time));
+			Calendar calendar = Calendar.getInstance();
+			// 设置时间,当前时间不用设置
+			calendar.set(Calendar.YEAR, calendartime.get(Calendar.YEAR));
+			calendar.set(Calendar.MONTH, calendartime.get(Calendar.MONTH));
+			calendar.set(Calendar.DAY_OF_MONTH, calendartime.get(Calendar.DAY_OF_MONTH)-3);
+			begintime = f.format(calendar.getTime());
+		}
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objid", objid);
+		map.put("begintime", begintime);
+		map.put("endtime", endtime);
+		map.put("objtypeid", objtypeid);//1监测站点实时数据     2监测站点日数据
+		List<Map<String,Object>> list = reportformService.queryrealData(map);
+		return list;
+	}
+	
+	//月报
+	@RequestMapping(value = "/queryMonthlyReport.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> queryMonthlyReport(HttpServletRequest request) throws Exception{
+		Logger.getLogger("").info("业务报表 月报");
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		if(objid.equals("")){
+			objid = getobjs();
+		}
+		String begintime = request.getParameter("begintime") == null?"":request.getParameter("begintime").toString();
+		String endtime = request.getParameter("endtime") == null?"":request.getParameter("endtime").toString();
+		if(!begintime.equals("")){
+			begintime += "-01";
+		}
+		if(!endtime.equals("")){
+			endtime = getDateLastDay(endtime);
+		}
+		String [] objids = objid.split(",");
+		List<Map<String,Object>> list = new ArrayList<Map<String,Object>>();
+		for(String s:objids){
+			map.put("objid", s);
+			map.put("begintime", begintime);
+			map.put("endtime", endtime);
+			map.put("objtypeid", 2);// 2监测站点日数据
+			List<Map<String,Object>> slist = reportformService.queryrealData(map);
+			list.addAll(reportformService.queryMonthlyReport(slist));
+		}
+		for(Map<String,Object> m:list){
+			DecimalFormat df = new DecimalFormat("#0.0");
+			m.put("so2", df.format(m.get("so2")));
+			m.put("o3", df.format(m.get("o3")));
+			m.put("co", df.format(m.get("co")));
+			m.put("no2", df.format(m.get("no2")));
+			m.put("pm10", df.format(m.get("pm10")));
+			m.put("pm25", df.format(m.get("pm25")));
+			m.put("yl", df.format(m.get("yl")));
+		}
+		return list;
+	}
+	
+	//年报
+	@RequestMapping(value = "/queryYearReport.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> queryYearReport(HttpServletRequest request) throws Exception{
+		Logger.getLogger("").info("业务报表 年报");
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		if(objid.equals("")){
+			objid = getobjs();
+		}
+		String begintime = request.getParameter("begintime") == null?"":request.getParameter("begintime").toString();
+		String endtime = request.getParameter("endtime") == null?"":request.getParameter("endtime").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		String [] objids = objid.split(",");
+		List<Map<String,Object>> list = new ArrayList<Map<String,Object>>();
+		for(String s:objids){
+			map.put("objid", s);
+			map.put("begintime", begintime);
+			map.put("endtime", endtime);
+			map.put("objtypeid", 2);// 2监测站点日数据
+			List<Map<String,Object>> slist = reportformService.queryrealData(map);
+			list.addAll(reportformService.queryYearReport(slist));
+		}
+		for(Map<String,Object> m:list){
+			DecimalFormat df = new DecimalFormat("#0.0");
+			m.put("so2", df.format(m.get("so2")));
+			m.put("o3", df.format(m.get("o3")));
+			m.put("co", df.format(m.get("co")));
+			m.put("no2", df.format(m.get("no2")));
+			m.put("pm10", df.format(m.get("pm10")));
+			m.put("pm25", df.format(m.get("pm25")));
+			m.put("yl", df.format(m.get("yl")));
+		}
+		return list;
+	}
+	
+	//月报设置时间--获取月份的最后一天
+	public String getDateLastDay(String date) throws ParseException {
+		SimpleDateFormat f = new SimpleDateFormat("yyyy-MM");
+		Date time = f.parse(date);
+		Calendar calendar = Calendar.getInstance();
+		// 设置时间,当前时间不用设置
+		calendar.set(Calendar.YEAR, time.getYear()+1900);
+		calendar.set(Calendar.MONTH, time.getMonth());
+		calendar.set(Calendar.DAY_OF_MONTH, 1); 
+		calendar.set(Calendar.DATE, calendar.getActualMaximum(Calendar.DATE));
+		DateFormat format = new SimpleDateFormat("yyyy-MM-dd ");
+		return format.format(calendar.getTime());
+	}
+	
+	//计算去年的今天
+	public String getDateLastYear(String date) throws ParseException {
+		SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd");
+		Calendar calendartime = Calendar.getInstance();
+		calendartime.setTime(f.parse(date));
+		Calendar calendar = Calendar.getInstance();
+		// 设置时间,当前时间不用设置
+		calendar.set(Calendar.YEAR, calendartime.get(Calendar.YEAR)-1);
+		calendar.set(Calendar.MONTH, calendartime.get(Calendar.MONTH));
+		calendar.set(Calendar.DAY_OF_MONTH, calendartime.get(Calendar.DAY_OF_MONTH));
+//		calendar.set(Calendar.DATE, calendar.getActualMaximum(Calendar.DATE));
+		DateFormat format = new SimpleDateFormat("yyyy-MM-dd ");
+		return format.format(calendar.getTime());
+	}
+	//计算去年的今天
+	public String getDateLastMonth(String date) throws ParseException {
+		SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd");
+		Calendar calendartime = Calendar.getInstance();
+		calendartime.setTime(f.parse(date));
+		Calendar calendar = Calendar.getInstance();
+		// 设置时间,当前时间不用设置
+		calendar.set(Calendar.YEAR, calendartime.get(Calendar.YEAR));
+		calendar.set(Calendar.MONTH, calendartime.get(Calendar.MONTH)-1);
+		calendar.set(Calendar.DAY_OF_MONTH, calendartime.get(Calendar.DAY_OF_MONTH));
+//			calendar.set(Calendar.DATE, calendar.getActualMaximum(Calendar.DATE));
+		DateFormat format = new SimpleDateFormat("yyyy-MM-dd ");
+		return format.format(calendar.getTime());
+	}
+	
+	//获取obj
+	public String getobjs(){
+		String objids = "";
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objtypeid", 2);
+		List<Map<String,Object>> wzlist = reportformService.getwz(map);
+		HashSet<Map<String,Object>> h = new HashSet<Map<String,Object>>();
+		for(Map<String,Object> m:wzlist){
+			m.remove("devicename");
+			m.remove("devicenumber");
+			m.remove("rmk1");
+			m.remove("objtypeid");
+			m.remove("objname");
+			h.add(m);
+		}
+		wzlist.clear();
+		wzlist.addAll(h);
+		for(int i=0;i<wzlist.size();i++){
+			objids += wzlist.get(i).get("objid").toString();
+			if(i<wzlist.size()-1){
+				objids+=",";
+			}
+		}
+		return objids;
+	}
+	
+	/**
+	 * 探空曲线查询
+	 * @param request
+	 * @return
+	 */
+	@RequestMapping(value = "/queryTkqx.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public String queryTkqx(HttpServletRequest request){
+		Logger.getLogger("").info("查询探空曲线");
+		String collecttime = request.getParameter("collecttime") == null?"":request.getParameter("collecttime").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("collecttime", collecttime);
+		List<Map<String, Object>> list = reportformService.queryTkqx(map);
+		return list.get(0).get("datavalue").toString();
+	}
+	
+	//AQI日历
+	@RequestMapping(value = "/queryAqiCalendar.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String, Object>> queryAqiCalendar(HttpServletRequest request) throws Exception{
+		Logger.getLogger("").info("AQI日历");
+		String time = request.getParameter("time") == null?"":request.getParameter("time").toString();
+		String begintime = time+"-01 00:00:00";
+		String endtime = getDateLastDay(time)+"23:59:59";
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("begintime", begintime);
+		map.put("endtime", endtime);
+		return reportformService.queryAqiCalendar(map);
+	}
+	
+	//国站空气质量优良率
+	@RequestMapping(value = "/queryGoodrate.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> queryGoodrate(HttpServletRequest request) throws ParseException{
+		Logger.getLogger("").info("国站空气质量优良率");
+		String type = request.getParameter("type") == null?"":request.getParameter("type").toString();
+		Map<String,Object> map = new HashMap<String, Object>();
+		Map<String, Object> resultmap = new HashMap<String, Object>();
+		DecimalFormat df = new DecimalFormat("#.00");
+		String time = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-01 00:00:00", "1", "1", "6", "");
+		if(("当月").equals(type)){
+			//当月
+			map.put("begintime", time);
+			map.put("endtime", getDateLastDay(time)+"23:59:59");
+			Double goodrate1 = reportformService.queryGoodrate(map);
+			//去年当月
+			map.put("begintime", getDateLastYear(time));
+			map.put("endtime", getDateLastYear(getDateLastDay(time)+"23:59:59"));
+			Double goodrate2 = reportformService.queryGoodrate(map);
+			//上月
+			map.put("begintime", getDateLastMonth(time));
+			map.put("endtime", getDateLastMonth(getDateLastDay(time)+"23:59:59"));
+			Double goodrate3 = reportformService.queryGoodrate(map);
+			resultmap.put("time", time);
+			resultmap.put("goodrate", goodrate1);//当月优良率
+			resultmap.put("tongbi", goodrate2==0D?"无":df.format((goodrate1-goodrate2)/goodrate2*100));
+			resultmap.put("huanbi", goodrate3==0D?"无":df.format((goodrate1-goodrate3)/goodrate3*100));
+		}else if(("当年").equals(type)){
+			Calendar calendar = Calendar.getInstance();
+			SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-01 00:00:00");
+			calendar.setTime(f.parse(time));
+			int year = calendar.get(Calendar.YEAR);
+			//当年
+			map.put("begintime", year+"-01-01 00:00:00");
+			map.put("endtime", year+"-12-31 23:59:59");
+			Double goodrate1 = reportformService.queryGoodrate(map);
+			//去年
+			map.put("begintime", (year-1)+"-01-01 00:00:00");
+			map.put("endtime", (year-1)+"-12-31 23:59:59");
+			Double goodrate2 = reportformService.queryGoodrate(map);
+			resultmap.put("time", year);
+			resultmap.put("goodrate", goodrate1);//当年优良率
+			resultmap.put("huanbi", goodrate2==0D?"无":df.format((goodrate1-goodrate2)/goodrate2*100));
+		}
+		return resultmap;
+	}
+	
+	//实时监测数据
+	@RequestMapping(value = "/queryRealTimeData.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Object> queryRealTimeData(HttpServletRequest request){
+		Logger.getLogger("").info("实时监测数据");
+		List<Object> resultList = new ArrayList<Object>();
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		String time = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:00:00", "1,4", "1", "1,5", "");
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("begintime", time);
+		map.put("objid", objid);
+		List<Map<String,Object>> list = reportformService.queryRealTimeData(map);
+		map.remove("objid");
+		resultList.add(map);
+		resultList.add(list);
+		return resultList;
+	}
+	
+	//空气质量优良率(时，月，年)
+	@RequestMapping(value = "/queryGoodratetwo.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Object> queryGoodratetwo(HttpServletRequest request) throws Exception{
+		Logger.getLogger("").info("空气质量优良率(时，月，年)");
+		String type = request.getParameter("type") == null?"":request.getParameter("type").toString();
+		List<Object> resultList = new ArrayList<Object>();
+		String time = "";
+		Map<String, Object> map = new HashMap<String, Object>();
+		if(("时").equals(type)){
+			time = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:00:00", "4", "9", "1", "");
+			map.put("objtypeid", 1);
+			map.put("begintime", time);
+			map.put("endtime", time);
+		}else if(("日").equals(type)){
+			time = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-dd HH24:00:00", "4", "9", "2", "");
+			map.put("objtypeid", 2);
+			map.put("begintime", time);
+			map.put("endtime", time);
+		}else if(("月").equals(type)){
+			SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-01 00:00:00");
+			time = baseaddDao.getMaxTimeByDtOtid("yyyy-MM-01 00:00:00", "4", "9", "2", "");
+			map.put("objtypeid", 2);
+			map.put("begintime", time);
+			map.put("endtime", getDateLastDay(time)+"23:59:59");
+		}
+		List<Map<String,Object>> list = reportformService.queryGoodratetwo(map);
+		Map<String,Object> m = new HashMap<String, Object>();
+		m.put("time", time);
+		resultList.add(m);
+		resultList.add(list);
+		return resultList;
+	}
+}

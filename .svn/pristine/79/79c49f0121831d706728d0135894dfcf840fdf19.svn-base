@@ -1,0 +1,353 @@
+package wy.qingdao_atmosphere.weatheranalyze.service;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.apache.commons.net.ftp.FTPClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import wy.qingdao_atmosphere.weatheranalyze.dao.WeatherAnalyzeDao;
+import wy.util.FtpUtil;
+import wy.util.RedisTemplateUtil;
+/**
+ * @author xsq
+ * @description 气象分析Service层接口实现类
+ * 
+ */
+@Service("weatherAnalyzeService")
+public class WeatherAnalyzeServiceImpl implements WeatherAnalyzeService {
+	
+	private WeatherAnalyzeDao weatherAnalyzeDao;
+
+	public WeatherAnalyzeDao getWeatherAnalyzeDao() {
+		return weatherAnalyzeDao;
+	}
+	@Resource
+	public void setWeatherAnalyzeDao(WeatherAnalyzeDao weatherAnalyzeDao) {
+		this.weatherAnalyzeDao = weatherAnalyzeDao;
+	}
+	
+	@Autowired
+	private RedisTemplateUtil redisTemplate;
+	
+	private final String ip = "121.196.198.37";
+	private final int port = 21;
+	private final String username = "wyftp";
+	private final String password = "wy!@#456";
+	
+	/**
+	 * @description 根据气场类型和时间获取网格预测图片
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return List<String>
+	 */
+	public List<String> getWeatherImgUrl(FTPClient ftpClient, String weathertype, String forecastDate){
+		List<String> resultlist = new ArrayList<String>();
+		if(!"".equals(weathertype) && !"".equals(forecastDate)){
+			//ftp目录串
+			String ftpUrl = "";
+			if(weathertype.equals("WindMap")){
+				ftpUrl = "/WRF/"+weathertype+"/wind/"+forecastDate+"08/H0/";
+			}else if(weathertype.equals("RainMap")){
+				ftpUrl = "/WRF/"+weathertype+"/rain/"+forecastDate+"08/";
+			}else if(weathertype.equals("PressureMap")){
+				ftpUrl = "/WRF/"+weathertype+"/pressure/"+forecastDate+"08/";
+			}else if(weathertype.equals("TemperatureMap")){
+				ftpUrl = "/WRF/"+weathertype+"/temp/"+forecastDate+"08/H0/";
+			}else if(weathertype.equals("RHMap")){
+				ftpUrl = "/WRF/"+weathertype+"/rh/"+forecastDate+"08/";
+			}
+			try {
+				String[] str = ftpClient.listNames(ftpUrl);
+				for(int i = 0; i < str.length; i++){
+					if(str[i].contains(".png")){
+						String fileurl = "http://"+ip+":8080/WeatherImgServer"+str[i];
+						resultlist.add(fileurl);
+					}
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		return resultlist;
+	}
+	
+	/**
+	 * @description 根据气场类型和时间获取实时数据
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherActualData(FTPClient ftpClient, String weathertype, String forecastDate){
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		if(!"".equals(weathertype) && !"".equals(forecastDate)){
+			try {
+				//ftp目录串
+				String ftpUrl = "";
+				if(weathertype.equals("WindMap")){
+					ftpUrl = "/WRF/"+weathertype+"/wind/"+forecastDate+"08/H0/avespeed.txt";
+				}else if(weathertype.equals("RainMap")){
+					ftpUrl = "/WRF/"+weathertype+"/rain/"+forecastDate+"08/averain.txt";
+				}else if(weathertype.equals("PressureMap")){
+					ftpUrl = "/WRF/"+weathertype+"/pressure/"+forecastDate+"08/avepre.txt";
+				}else if(weathertype.equals("TemperatureMap")){
+					ftpUrl = "/WRF/"+weathertype+"/temp/"+forecastDate+"08/H0/avetemp.txt";
+				}else if(weathertype.equals("RHMap")){
+					ftpUrl = "/WRF/"+weathertype+"/rh/"+forecastDate+"08/averh.txt";
+				}
+				//读取文件返回文本内容
+				String data = FtpUtil.readFile(ftpClient, ftpUrl);
+				//按分号分隔成一组组的数据
+				String[] groupData = data.split(";");
+				for(int i = 0; i < groupData.length; i++){
+					//对一组数据进行空格分隔
+					String[] oneData = groupData[i].trim().split(" ");
+					resultMap.put(oneData[0], oneData[1]);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @description 根据气场类型和时间获取日数据
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherDayData(FTPClient ftpClient, String weathertype, String forecastDate){
+		Map<String, Object> resultMap = new HashMap<String, Object>();
+		if(!"".equals(weathertype) && !"".equals(forecastDate)){
+			try {
+				//ftp目录串
+				String ftpUrl = "";
+				if(weathertype.equals("WindMap")){
+					ftpUrl = "/WRF/"+weathertype+"/wind/"+forecastDate+"08/H0/day_speed.txt";
+				}else if(weathertype.equals("RainMap")){
+					ftpUrl = "/WRF/"+weathertype+"/rain/"+forecastDate+"08/day_averain.txt";
+				}else if(weathertype.equals("PressureMap")){
+					ftpUrl = "/WRF/"+weathertype+"/pressure/"+forecastDate+"08/day_minmax.txt";
+				}else if(weathertype.equals("TemperatureMap")){
+					ftpUrl = "/WRF/"+weathertype+"/temp/"+forecastDate+"08/H0/day_minmax.txt";
+				}else if(weathertype.equals("RHMap")){
+					ftpUrl = "/WRF/"+weathertype+"/rh/"+forecastDate+"08/day_minmax.txt";
+				}
+				//读取文件返回文本内容
+				String data = FtpUtil.readFile(ftpClient, ftpUrl);
+				//对一组数据进行双空格替换为单空格，然后按单空格分隔
+				String[] oneData = data.trim().replaceAll("  ", " ").split(" ",2);
+				resultMap.put(oneData[0], oneData[1]);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return resultMap;
+	}
+	
+	/**
+	 * @description 根据气场类型和时间获取网格图片xy坐标信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherImgXYInfo(FTPClient ftpClient, String weathertype, String forecastDate){
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		if(!"".equals(weathertype) && !"".equals(forecastDate)){
+			try {
+				//ftp目录串
+				String ftpUrl = "";
+				if(weathertype.equals("WindMap")){
+					ftpUrl = "/WRF/"+weathertype+"/wind/"+forecastDate+"08/xy.txt";
+				}else if(weathertype.equals("RainMap")){
+					ftpUrl = "/WRF/"+weathertype+"/rain/"+forecastDate+"08/xy.txt";
+				}else if(weathertype.equals("PressureMap")){
+					ftpUrl = "/WRF/"+weathertype+"/pressure/"+forecastDate+"08/xy.txt";
+				}else if(weathertype.equals("TemperatureMap")){
+					ftpUrl = "/WRF/"+weathertype+"/temp/"+forecastDate+"08/xy.txt";
+				}else if(weathertype.equals("RHMap")){
+					ftpUrl = "/WRF/"+weathertype+"/rh/"+forecastDate+"08/xy.txt";
+				}
+				//读取文件返回文本内容
+				String data = FtpUtil.readFile(ftpClient, ftpUrl);
+				//按分号分隔成一组组的数据
+				String[] groupData = data.split(";");
+				for(int i = 0; i < groupData.length; i++){
+					//对一组数据进行空格消除，然后根据=号分隔
+					String[] oneData = groupData[i].trim().replaceAll(" ", "").split("=");
+					resultMap.put(oneData[0], oneData[1]);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return resultMap;
+	}
+	
+	/**
+	 * @description 根据时间获取风场UV数据信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFWindUVDataInfo(FTPClient ftpClient, String weathertype, String forecastDate){
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		//风场U数据文件URL列表
+		List<String> UFileUrlList = new ArrayList<String>();
+		//风场V数据文件URL列表
+		List<String> VFileUrlList = new ArrayList<String>();
+		//风场U数据集合
+		Map<String, Object> UMap = new LinkedHashMap<String, Object>();
+		//风场V数据集合
+		Map<String, Object> VMap = new LinkedHashMap<String, Object>();
+		if(!"".equals(weathertype) && !"".equals(forecastDate)){
+			try {
+				//ftp目录串
+				String ftpUrl = "";
+				if(weathertype.equals("WindMap")){
+					ftpUrl = "/WRF/"+weathertype+"/wind/"+forecastDate+"08/H0/";
+				}
+				//获取目录下所有文件完整名称
+				String[] str = ftpClient.listNames(ftpUrl);
+				for(int i = 0; i < str.length; i++){
+					//取风场U数据文件URL插入UFileUrlList
+					if(str[i].contains(".u")){
+						String fileurl = str[i];
+						UFileUrlList.add(fileurl);
+					}
+					//取风场V数据文件URL插入VFileUrlList
+					if(str[i].contains(".v")){
+						String fileurl = str[i];
+						VFileUrlList.add(fileurl);
+					}
+				}
+				for(int i = 0; i < UFileUrlList.size(); i++){
+					/*//每小时风场U数据
+					List<String> UDataList = new ArrayList<String>();
+					//每小时风场V数据
+					List<String> VDataList = new ArrayList<String>();*/
+					//风场U文件地址
+					String UFileURL = UFileUrlList.get(i);
+					//风场V文件地址
+					String VFileURL = VFileUrlList.get(i);
+					//当前U数据文件名称时间截取
+					String UTime = UFileURL.substring(UFileURL.lastIndexOf("S")+1, UFileURL.length()-2);
+					//当前V数据文件名称时间截取
+					String VTime = VFileURL.substring(VFileURL.lastIndexOf("S")+1, VFileURL.length()-2);
+					//读取U文件返回文本内容
+					String UData = FtpUtil.readFile(ftpClient, UFileURL);
+					//读取V文件返回文本内容
+					String VData = FtpUtil.readFile(ftpClient, VFileURL);
+					//去掉UData文本的空格，然后按照;号拆分数据
+					String[] UList = UData.replace(" ", "").split(";");
+					//去掉VData文本的空格，然后按照;号拆分数据
+					String[] VList = VData.replace(" ", "").split(";");
+					//U数据集合，key为时间，value为U数据
+					UMap.put(UTime, UList);
+					//V数据集合，key为时间，value为V数据
+					VMap.put(VTime, VList);
+				}
+				resultMap.put("UData", UMap);
+				resultMap.put("VData", VMap);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return resultMap;
+	}
+	
+	/**
+	 * @description 根据时间获取风场UV数据信息（数据存放Redis服务器中）
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	@SuppressWarnings("unchecked")
+	public Map<String, Object> WRFWindUVDataInfoToRedisService(FTPClient ftpClient, String weathertype, String forecastDate) {
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		//Redis数据库的key
+		String key = weathertype+forecastDate;
+		//查询这个Redis数据库是否有这个key
+		boolean existsCathValue = redisTemplate.existsValue(3,key);
+		//判断Redis数据库是否有key有则取Redis缓存数据，否则就往Redis数据库添加数据
+		if(existsCathValue){
+			//取Redis数据库的数据
+			resultMap = redisTemplate.getCatchForHash(key);
+		}else{
+			//根据时间获取风场UV数据信息
+			resultMap = getWRFWindUVDataInfo(ftpClient, weathertype, forecastDate);
+			Map<String, Object> dataMap = new HashMap<String, Object>();
+			dataMap.put(key, resultMap);
+			//往Redis数据库存储数据，时间定为1440分钟(24小时)
+			redisTemplate.setCatchByHash(1440, dataMap, key);
+			return dataMap;
+		}
+		return resultMap;
+	}
+	
+	/**
+	 * @description 根据气场类型和时间获取WRF信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFWeatherData(String weathertype, String forecastDate){
+		Map<String, Object> resultMap = new LinkedHashMap<String, Object>();
+		try {
+			FTPClient ftpClient = FtpUtil.ftpConnection(ip, port, username, password);
+			//根据气场类型和时间获取网格预测图片
+			List<String> imgUrl = getWeatherImgUrl(ftpClient, weathertype, forecastDate);
+			//根据气场类型和时间获取实时数据
+			Map<String, Object> actualData = getWeatherActualData(ftpClient, weathertype, forecastDate);
+			//根据气场类型和时间获取日数据
+			Map<String, Object> dayData = getWeatherDayData(ftpClient, weathertype, forecastDate);
+			//根据气场类型和时间获取网格图片xy坐标信息
+			Map<String, Object> imgXYInfo = getWeatherImgXYInfo(ftpClient, weathertype, forecastDate);
+			resultMap.put("imgUrl", imgUrl);
+			resultMap.put("actualData", actualData);
+			resultMap.put("dayData", dayData);
+			resultMap.put("imgXYInfo", imgXYInfo);
+			if(weathertype.equals("WindMap")){
+				//根据时间获取风场UV数据信息
+				Map<String, Object> WindUVData = WRFWindUVDataInfoToRedisService(ftpClient, weathertype, forecastDate);
+				resultMap.put("WindUVData", WindUVData);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return resultMap;
+	}
+	
+	
+	/**
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 */
+	/*public static void main(String[] args) {
+		FTPClient ftpClient = FtpUtil.ftpConnection("localhost", 21, "user", "123456");
+		String weathertype = "WindMap";
+		String forecastDate = "20180628";
+		
+		WeatherAnalyzeServiceImpl imp = new WeatherAnalyzeServiceImpl();
+		//imp.getWeatherImgUrl(ftpClient,weathertype,forecastDate);
+		//imp.getWeatherActualData(ftpClient, weathertype, forecastDate);
+		//imp.getWeatherDayData(ftpClient, weathertype, forecastDate);
+		//imp.getWeatherImgXYInfo(ftpClient, weathertype, forecastDate);
+		//imp.getWRFWindUVDataInfo(ftpClient, weathertype, forecastDate);
+		FtpUtil.ftpClose(ftpClient);
+	}*/
+}

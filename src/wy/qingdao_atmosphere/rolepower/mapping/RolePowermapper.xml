@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.rolepower.mapping.RolePowermapper">
+	<!-- 登录 -->
+	<select id="login"  parameterType="wy.qingdao_atmosphere.rolepower.domain.User" resultType="wy.qingdao_atmosphere.rolepower.domain.User">
+		select a.*,b.mc from tb_uim_user a,tb_uim_depart b where a.orgid = b.id and a.userid=#{userid} and a.pwd=md5(#{pwd}) and a.islock = 1;
+	</select>
+	
+	<!-- 用户模块：添加用户 -->
+	<insert id="addUser" parameterType="wy.qingdao_atmosphere.rolepower.domain.User">
+		insert into tb_uim_user(userid,pwd,username,islock,orgid,usernum,phone,telephone,job,cornet,headimage_path,zfznum,showindex,sex,iscomm) values(#{userid},md5(#{pwd}),#{username},1,#{orgid},#{usernum},#{phone},#{telephone},#{job},#{cornet},#{headimage_path},#{zfznum},(select max(showindex) from tb_uim_user)+1,#{sex},#{iscomm});
+	</insert>
+	
+	<!-- 用户模块：修改用户 -->
+	<update id="updateUser" parameterType="wy.qingdao_atmosphere.rolepower.domain.User">
+		update tb_uim_user set usernum = #{usernum}, username = #{username},phone = #{phone},orgid = #{orgid},telephone = #{telephone},job = #{job},cornet = #{cornet}, headimage_path = #{headimage_path},zfznum = #{zfznum},showindex = #{showindex},sex = #{sex},iscomm = #{iscomm} where userid = #{userid}
+	</update>
+	
+	<!-- 用户模块：修改密码 -->
+	<update id="updatePasswordByUserid" parameterType="wy.qingdao_atmosphere.rolepower.domain.User">
+		update tb_uim_user set pwd = md5(#{pwd}) where userid = #{userid};
+	</update>
+	
+	<!-- 用户模块:查看所有用户 -->
+	<select id="getAllUser" resultType="wy.qingdao_atmosphere.rolepower.domain.User">
+		select a.*,b.mc,c.role_name from tb_uim_user a,tb_uim_depart b,tb_uim_role c,tb_uim_userrole d 
+		where a.orgid = b.id and c.id = d.role_id and a.userid = d.username and a.islock = 1  and a.userid != 'admin'
+		order by a.showindex;
+	</select>
+	
+	<!-- 用户模块：综合查询 -->
+	<select id="SearchUser" resultType="wy.qingdao_atmosphere.rolepower.domain.User" parameterType="wy.qingdao_atmosphere.rolepower.domain.User">
+		select a.*,b.mc,c.role_name from tb_uim_user a,tb_uim_depart b,tb_uim_role c,tb_uim_userrole d 
+		where a.orgid = b.id and c.id = d.role_id and a.userid = d.username and a.islock = 1 and a.userid != 'admin'
+		<if test="username != null and username != ''">
+		and a.username like concat(concat('%',#{username}),'%')
+		</if>
+		<if test="userid != null and userid != ''">
+		and a.userid like concat(concat('%',#{userid}),'%')
+		</if>
+		<if test="mc != null and mc != ''">
+		and b.mc = #{mc}
+		</if>
+		order by a.showindex;
+	</select>
+	
+	<!-- 用户模块：根据userid查看用户信息 -->
+	<select id="getUserInfoByUserid" parameterType="string" resultType="wy.qingdao_atmosphere.rolepower.domain.User">
+		select a.*,b.mc,c.role_name,c.id as role_id from tb_uim_user a,tb_uim_depart b,tb_uim_role c,tb_uim_userrole d where a.orgid = b.id and c.id = d.role_id and a.userid = d.username and a.islock = 1 and a.userid = #{_parameter,jdbcType=VARCHAR} order by a.showindex;
+	</select>
+	
+	<!-- 用户模块：删除用户 -->
+	<delete id="deleteUser" parameterType="wy.qingdao_atmosphere.rolepower.domain.User">
+		delete from tb_uim_userrole where username = #{userid};
+		delete from tb_uim_user where userid = #{userid};
+	</delete>
+	
+	<!-- 角色模块：添加角色 -->
+	<insert id="addRole" parameterType="wy.qingdao_atmosphere.rolepower.domain.Role">
+		insert into tb_uim_role values(md5(to_char(extract(epoch FROM now()),'999999999999.99')),#{role_name},#{memo},(select max(order_num) from tb_uim_role)+1,1);
+	</insert>
+	
+	<!-- 角色模块：查看所有角色 -->
+	<select id="getAllRole" resultType="wy.qingdao_atmosphere.rolepower.domain.Role">
+		select * from tb_uim_role where islock = 1 and id != 'administrator' order by order_num;
+	</select>
+	
+	<!-- 角色模块：根据role_id查看角色信息 -->
+	<select id="getRoleInfoByRoleid" resultType="wy.qingdao_atmosphere.rolepower.domain.Role" parameterType="string">
+		select * from tb_uim_role where islock = 1 and id = #{_parameter,jdbcType=VARCHAR};
+	</select>
+	
+	<!-- 角色模块：删除角色 -->
+	<update id="deleteRole" parameterType="wy.qingdao_atmosphere.rolepower.domain.Role">
+		update tb_uim_role set islock = 0 where id = #{id};
+	</update>
+	
+	<!-- 角色模块：修改角色信息 -->
+	<update id="updateRole" parameterType="wy.qingdao_atmosphere.rolepower.domain.Role">
+		update tb_uim_role set role_name = #{role_name} , memo = #{memo} , order_num = #{order_num} where id = #{id};
+	</update>
+	
+	<!-- 角色模块：根据角色id查看菜单信息 -->
+	<select id="getMenuInfoByRoleid" parameterType="string" resultType="wy.qingdao_atmosphere.rolepower.domain.Menu">
+		select distinct a.* from tb_uim_module a,tb_uim_rolemodule b,tb_uim_role c 
+		where a.module_key = b.module_key and b.role_id = c.id and a.delet_flag = 1
+		and b.role_id = #{_parameter,jdbcType=VARCHAR}
+		order by a.module_sort,a.showindex
+	</select>
+	
+	<!-- 菜单模块：查看所有的菜单 -->
+	<select id="getAllMenu" resultType="wy.qingdao_atmosphere.rolepower.domain.Menu">
+		select * from tb_uim_module where delet_flag = 1 order by module_sort,showindex;
+	</select>
+	
+	<!-- 菜单模块：添加菜单 -->
+	<insert id="addMenu" parameterType="wy.qingdao_atmosphere.rolepower.domain.Menu">
+		insert into tb_uim_module values(md5(to_char(extract(epoch FROM now()),'999999999999.99')),#{module_name},#{higherlevelkey},#{localurl},#{icon_path},#{remoteurl},#{module_sort},1,#{defaultpageurl},#{showindex});
+	</insert>
+	
+	<!-- 菜单模块：修改菜单信息 -->
+	<update id="updateMenu" parameterType="wy.qingdao_atmosphere.rolepower.domain.Menu">
+		update tb_uim_module set module_name = #{module_name} , higherlevelkey = #{higherlevelkey} , localurl = #{localurl} , icon_path = #{icon_path} , remoteurl = #{remoteurl} , module_sort = #{module_sort} , defaultpageurl = #{defaultpageurl} , showindex = #{showindex}
+		where module_key = #{module_key};
+	</update>
+	
+	<!-- 菜单模块：删除菜单 -->
+	<update id="deleteMenu" parameterType="wy.qingdao_atmosphere.rolepower.domain.Menu">
+		update tb_uim_module set delet_flag = 0 where module_key = #{module_key};
+	</update>
+	
+	<!-- 登录成功后：根据用户id去查对应的角色的对应的菜单 -->
+	<select id="getMenuListByUserid" parameterType="string" resultType="wy.qingdao_atmosphere.rolepower.domain.Menu">
+		select distinct a.* from tb_uim_module a,tb_uim_rolemodule b,tb_uim_role c 
+		where a.module_key = b.module_key and b.role_id = c.id and a.delet_flag = 1
+		and b.role_id in 
+		(
+		   select a.id from tb_uim_role a,tb_uim_userrole b,tb_uim_user c
+		   where a.id = b.role_id and b.username = c.userid and c.userid = #{_parameter,jdbcType=VARCHAR}
+		   and a.islock = 1
+		)
+		order by a.module_sort,a.showindex
+	</select>
+	
+	<!-- 给用户赋予角色的时候，把之前的对应关系清空 -->
+	<delete id="deleteUserRole" parameterType="string">
+		delete from tb_uim_userrole where username = #{_parameter,jdbcType=VARCHAR};
+	</delete>
+	
+	<!-- 给用户添加一个角色 -->
+	<insert id="addUserRole" parameterType="wy.qingdao_atmosphere.rolepower.domain.UserRole">
+		insert into tb_uim_userrole values(md5(to_char(extract(epoch FROM now()),'999999999999.99')),#{username},#{role_id});
+	</insert>
+	
+	<!-- 给角色赋予对应的菜单 -->
+	<insert id="addRoleMenu" parameterType="java.util.List">
+		insert into tb_uim_rolemodule values
+		<foreach collection="list" item="item" index="index" separator=",">
+		 (md5(concat(to_char(extract(epoch FROM now()),'999999999999'),RANDOM())),#{item.role_id},#{item.module_key})
+		</foreach>
+	</insert>
+	
+	<!-- 给角色赋予权限的时候，把之前对应关系清空 -->
+	<delete id="deleteRoleMenu" parameterType="string">
+		delete from tb_uim_rolemodule where role_id = #{_parameter,jdbcType=VARCHAR};
+	</delete>
+	
+	<!-- 部门模块：查看所有的部门信息 -->
+	<select id="getAllDepartment" resultType="wy.qingdao_atmosphere.rolepower.domain.Department">
+		select * from tb_uim_depart order by showindex
+	</select>
+	<!-- 部门考核管理模块：查看所有的部门信息 -->
+	<select id="ajaxDeptName" resultType="wy.qingdao_atmosphere.rolepower.domain.Department">
+		select id,mc from tb_uim_depart order by showindex
+	</select>
+	
+	<!-- tb_uim_useroperate_log日志管理，查询日志列表 -->
+	<select id="getUserOperateLogList" parameterType="map" resultType="wy.qingdao_atmosphere.rolepower.domain.UserOperateLog">
+		select logtype,logcontent,devicetype,ip,username,createtime from tb_uim_useroperate_log
+		where true
+		<if test="begintime == '' and endtime == ''">
+		and createtime &gt;= (select max(createtime)::date from tb_uim_useroperate_log)
+		</if>
+		<if test="keyword != null and keyword != ''">
+		and concat(logcontent,devicetype,ip,username) like concat(concat('%',#{keyword}),'%')
+		</if>
+		<if test="logtype != null and logtype != ''">
+		and logtype = #{logtype}
+		</if>
+		<if test="begintime != null and begintime != ''">
+		and createtime &gt;= (#{begintime}||' 00:00:00')::timestamp
+		</if>
+		<if test="endtime != null and endtime != ''">
+		and createtime &lt;= (#{endtime}||' 23:59:59')::timestamp
+		</if>
+		order by createtime desc
+	</select>
+</mapper>

@@ -1,0 +1,613 @@
+package wy.qingdao_atmosphere.rolepower.web;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpSession;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.util.IFileUtil;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.qingdao_atmosphere.rolepower.domain.Department;
+import wy.qingdao_atmosphere.rolepower.domain.Menu;
+import wy.qingdao_atmosphere.rolepower.domain.Role;
+import wy.qingdao_atmosphere.rolepower.domain.RoleMenu;
+import wy.qingdao_atmosphere.rolepower.domain.User;
+import wy.qingdao_atmosphere.rolepower.domain.UserOperateLog;
+import wy.qingdao_atmosphere.rolepower.domain.UserRole;
+import wy.qingdao_atmosphere.rolepower.service.RolePowerService;
+import org.apache.log4j.Logger;
+
+/**
+ * 角色权限模块Controller层接口调用类
+ * @author User
+ *
+ */
+@Controller
+public class RolePowerController {
+	@Autowired
+	private IFileUtil fileUtil;
+	
+	private RolePowerService rolepowerService;
+
+	public RolePowerService getRolepowerService() {
+		return rolepowerService;
+	}
+	@Resource
+	public void setRolepowerService(RolePowerService rolepowerService) {
+		this.rolepowerService = rolepowerService;
+	}
+	
+	@Autowired
+	private BaseaddDao baseaddDao;
+	
+	@Autowired
+	private HttpSession session;
+	
+	//登录
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	@RequestMapping(value = "/login.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map login(User user) {
+		Logger.getLogger("").info("进入登录方法");
+		//取当前时间
+		String date=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Calendar.getInstance().getTime());
+		//System.out.println("登录: 用户名为："+user.getUserid()+"    "+date);
+		//登录方法
+		List<User> userlist = rolepowerService.loginService(user);
+		Map map=new LinkedHashMap();
+		try {
+			if(userlist.size()<=0){
+				System.out.println("登录状态：  登录失败！请检查您的用户名和密码是否正确！   "+date);
+				map.put("userinfo", userlist);
+				map.put("message", 0);
+			}else{
+				System.out.println("登录状态：  登录成功！    "+date);
+				//登录成功后：根据用户id去查对应的角色的对应的菜单
+				List<Menu> menulist = rolepowerService.getMenuListByUseridService(user.getUserid());
+				//创建一个Map集合用来分别存放三个级别的菜单
+				Map<String,Object> map1 = new LinkedHashMap<String, Object>();
+				//创建三个个list集合用来存放三个等级菜单内容
+				List<Menu> list1 = new ArrayList<Menu>();
+				List<Menu> list2 = new ArrayList<Menu>();
+				List<Menu> list3 = new ArrayList<Menu>();
+				//初始化map集合
+				map1.put("FirstMenuList", list1);
+				map1.put("SecondMenuList", list2);
+				map1.put("ThirdMenuList", list3);
+				//循环遍历菜单选项根据菜单级别存入不同的集合中
+				for(Menu menu:menulist){
+					if(menu.getModule_sort() == 1){
+						list1.add(menu);
+						map1.put("FirstMenuList", list1);
+					}else if(menu.getModule_sort() == 2){
+						list2.add(menu);
+						map1.put("SecondMenuList", list2);
+					}else if(menu.getModule_sort() == 3){
+						list3.add(menu);
+						map1.put("ThirdMenuList", list3);
+					}
+				}
+				map.put("userinfo", userlist);
+				map.put("menuList", map1);
+				map.put("message", 1);
+				session.setAttribute("userid", user.getUserid());
+				session.setAttribute("username", user.getUsername());
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","用户登录", "用户登录->登录账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), "登录成功！", "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			map.put("userinfo", userlist);
+			map.put("message", 0);
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","用户登录", "用户登录->登录账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), "登录异常！", "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//用户模块：添加用户
+	@RequestMapping(value = "/addUser.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> addUser(User user){
+		Logger.getLogger("").info("用户模块：添加用户");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.addUserService(user);
+			if(state != 1){
+				map.put("message", "添加失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "添加成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","用户管理", "添加用户->添加的用户账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","用户管理", "添加用户->添加的用户账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//用户模块：修改用户
+	@RequestMapping(value = "/updateUser.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> updateUser(User user){
+		Logger.getLogger("").info("用户模块：修改用户");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.updateUserService(user);
+			if(state != 1){
+				map.put("message", "修改失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "修改成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","用户管理", "修改用户信息->修改信息的用户账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","用户管理", "修改用户信息->修改信息的用户账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//用户模块：修改密码
+	@RequestMapping(value = "/updatePasswordByUserid.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> updatePasswordByUserid(User user){
+		Logger.getLogger("").info("用户模块：修改密码");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.updatePasswordByUseridService(user);
+			if(state != 1){
+				map.put("message", "修改失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "修改成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","用户管理", "修改用户密码->修改信息的用户密码的账号为："+user.getUserid()+",真实姓名为："+user.getUsername()+",密码为："+user.getPwd(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","用户管理", "修改用户密码->修改信息的用户密码的账号为："+user.getUserid()+",真实姓名为："+user.getUsername()+",密码为："+user.getPwd(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//用户模块:查看所有用户
+	@RequestMapping(value = "/getAllUser.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<User> getAllUser(){
+		Logger.getLogger("").info("用户模块:查看所有用户");
+		return rolepowerService.getAllUserService();
+	}
+	
+	//用户模块：综合查询
+	@RequestMapping(value = "/SearchUser.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<User> SearchUser(User user){
+		Logger.getLogger("").info("用户模块：综合查询");
+		return rolepowerService.SearchUserService(user);
+	}
+	
+	//用户模块：根据userid查看用户信息
+	@RequestMapping(value = "/getUserInfoByUserid.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<User> getUserInfoByUserid(HttpServletRequest request){
+		Logger.getLogger("").info("用户模块：根据userid查看用户信息");
+		//获取前端传递的参数
+		String userid = request.getParameter("userid") == null ? "" : request.getParameter("userid");
+		return rolepowerService.getUserInfoByUseridService(userid);
+	}
+	
+	//用户模块：删除用户
+	@RequestMapping(value = "/deleteUser.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> deleteUser(User user){
+		Logger.getLogger("").info("用户模块：删除用户");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.deleteUserService(user);
+			if(state != 1){
+				map.put("message", "删除失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "删除成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","用户管理", "删除用户->删除的用户账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","用户管理", "删除用户->删除的用户账号为："+user.getUserid()+",真实姓名为："+user.getUsername(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//角色模块：添加角色
+	@RequestMapping(value = "/addRole.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> addRole(Role role){
+		Logger.getLogger("").info("角色模块：添加一个角色");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.addRoleService(role);
+			if(state != 1){
+				map.put("message", "添加失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "添加成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","角色管理", "添加角色->添加的角色名称为："+role.getRole_name(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","角色管理", "添加角色->添加的角色名称为："+role.getRole_name(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//角色模块:查看所有的角色
+	@RequestMapping(value = "/getAllRole.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Role> getAllRole(){
+		Logger.getLogger("").info("角色模块：查看所有角色");
+		return rolepowerService.getAllRoleService();
+	}
+	
+	//角色模块：根据role_id查看角色信息
+	@RequestMapping(value = "/getRoleInfoByRoleid.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Role> getRoleInfoByRoleid(HttpServletRequest request){
+		Logger.getLogger("").info("角色模块：根据role_id查看角色信息");
+		String roleid = request.getParameter("roleid") == null ? "" : request.getParameter("roleid");
+		return rolepowerService.getRoleInfoByRoleidService(roleid);
+	}
+	
+	//角色模块：删除角色
+	@RequestMapping(value = "/deleteRole.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> deleteRole(Role role){
+		Logger.getLogger("").info("角色模块：删除角色");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.deleteRoleService(role);
+			if(state != 1){
+				map.put("message", "删除失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "删除成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","角色管理", "删除角色->删除的角色名称为："+role.getRole_name(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","角色管理", "删除角色->删除的角色名称为："+role.getRole_name(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//角色模块：修改角色信息
+	@RequestMapping(value = "/updateRole.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> updateRole(Role role){
+		Logger.getLogger("").info("角色模块：修改角色信息");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.updateRoleService(role);
+			if(state != 1){
+				map.put("message", "修改失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "修改成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","角色管理", "修改角色->修改角色的名称为："+role.getRole_name()+",角色id为："+role.getId(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","角色管理", "修改角色->修改角色的名称为："+role.getRole_name()+",角色id为："+role.getId(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//角色模块：根据角色id查看菜单信息
+	@RequestMapping(value = "/getMenuInfoByRoleid.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> getMenuInfoByRoleid(HttpServletRequest request){
+		Logger.getLogger("").info("角色模块：根据角色id查看菜单信息");
+		//获取前端的参数
+		String roleid = request.getParameter("roleid") == null ? "" : request.getParameter("roleid");
+		//获取菜单项
+		List<Menu> menulist =  rolepowerService.getMenuInfoByRoleidService(roleid);
+		//创建一个Map集合用来分别存放三个级别的菜单
+		Map<String,Object> map = new LinkedHashMap<String, Object>();
+		//创建三个个list集合用来存放三个等级菜单内容
+		List<Menu> list1 = new ArrayList<Menu>();
+		List<Menu> list2 = new ArrayList<Menu>();
+		List<Menu> list3 = new ArrayList<Menu>();
+		//初始化map集合
+		map.put("FirstMenuList", null);
+		map.put("SecondMenuList", null);
+		map.put("ThirdMenuList", null);
+		//循环遍历菜单选项根据菜单级别存入不同的集合中
+		for(Menu menu:menulist){
+			if(menu.getModule_sort() == 1){
+				list1.add(menu);
+				map.put("FirstMenuList", list1);
+			}else if(menu.getModule_sort() == 2){
+				list2.add(menu);
+				map.put("SecondMenuList", list2);
+			}else if(menu.getModule_sort() == 3){
+				list3.add(menu);
+				map.put("ThirdMenuList", list3);
+			}
+		}
+		return map;
+	}
+	
+	//菜单模块：查看所有的菜单
+	@RequestMapping(value = "/getAllMenu.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> getAllMenu(){
+		Logger.getLogger("").info("菜单模块：查看所有的菜单");
+		//获取所有的菜单项
+		List<Menu> menulist =  rolepowerService.getAllMenuService();
+		//创建一个Map集合用来分别存放三个级别的菜单
+		Map<String,Object> map = new LinkedHashMap<String, Object>();
+		//创建三个个list集合用来存放三个等级菜单内容
+		List<Menu> list1 = new ArrayList<Menu>();
+		List<Menu> list2 = new ArrayList<Menu>();
+		List<Menu> list3 = new ArrayList<Menu>();
+		//初始化map集合
+		map.put("FirstMenuList", null);
+		map.put("SecondMenuList", null);
+		map.put("ThirdMenuList", null);
+		//循环遍历菜单选项根据菜单级别存入不同的集合中
+		for(Menu menu:menulist){
+			if(menu.getModule_sort() == 1){
+				list1.add(menu);
+				map.put("FirstMenuList", list1);
+			}else if(menu.getModule_sort() == 2){
+				list2.add(menu);
+				map.put("SecondMenuList", list2);
+			}else if(menu.getModule_sort() == 3){
+				list3.add(menu);
+				map.put("ThirdMenuList", list3);
+			}
+		}
+		return map;
+	}
+	
+	//菜单模块：添加菜单
+	@RequestMapping(value = "/addMenu.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> addMenu(Menu menu){
+		Logger.getLogger("").info("菜单模块：添加菜单");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.addMenuService(menu);
+			if(state != 1){
+				map.put("message", "添加失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "添加成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","菜单管理", "添加菜单->添加的菜单的名称为："+menu.getModule_name()+",菜单等级为："+menu.getModule_sort()+",菜单父级key为："+menu.getHigherlevelkey(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","菜单管理", "添加菜单->添加的菜单的名称为："+menu.getModule_name()+",菜单等级为："+menu.getModule_sort()+",菜单父级key为："+menu.getHigherlevelkey(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//菜单模块：修改菜单信息
+	@RequestMapping(value = "/updateMenu.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> updateMenu(Menu menu){
+		Logger.getLogger("").info("菜单模块：修改菜单信息");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.updateMenuService(menu);
+			if(state != 1){
+				map.put("message", "修改失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "修改成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","菜单管理", "修改菜单信息->修改菜单信息的菜单的key为："+menu.getModule_key()+",菜单的名称为："+menu.getModule_name()+",菜单等级为："+menu.getModule_sort()+",菜单父级key为："+menu.getHigherlevelkey(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","菜单管理", "修改菜单信息->修改菜单信息的菜单的key为："+menu.getModule_key()+",菜单的名称为："+menu.getModule_name()+",菜单等级为："+menu.getModule_sort()+",菜单父级key为："+menu.getHigherlevelkey(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//菜单模块：删除菜单
+	@RequestMapping(value = "/deleteMenu.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> deleteMenu(Menu menu){
+		Logger.getLogger("").info("菜单模块：删除菜单");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			int state = rolepowerService.deleteMenuService(menu);
+			if(state != 1){
+				map.put("message", "删除失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "删除成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","菜单管理", "删除菜单->删除菜单的key为："+menu.getModule_key()+",菜单的名称为："+menu.getModule_name(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","菜单管理", "删除菜单->删除菜单的key为："+menu.getModule_key()+",菜单的名称为："+menu.getModule_name(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//给用户添加一个角色
+	@RequestMapping(value = "/addUserRole.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> addUserRole(UserRole userrole){
+		Logger.getLogger("").info("给用户添加一个角色");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			//先清空对应关系
+			rolepowerService.deleteUserRoleService(userrole.getUsername());
+			//添加对应关系
+			int state = rolepowerService.addUserRoleService(userrole);
+			if(state != 1){
+				map.put("message", "添加失败!");
+				map.put("state", 0);
+			}else{
+				map.put("message", "添加成功！");
+				map.put("state", 1);
+				//日志存储
+				baseaddDao.addUserOperateLog("一般操作","用户管理", "给用户添加角色->用户的账号为："+userrole.getUsername()+",角色的id为："+userrole.getRole_id(), map.get("message").toString(), "true", "", "");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","用户管理", "给用户添加角色->用户的账号为："+userrole.getUsername()+",角色的id为："+userrole.getRole_id(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//给角色赋予对应的菜单
+	@RequestMapping(value = "/addRoleMenu.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public Map<String,Object> addRoleMenu(RoleMenu rolemenu){
+		Logger.getLogger("").info("给角色赋予对应的菜单");
+		Map<String,Object> map = new HashMap<String,Object>();
+		try {
+			//创建一个存放RoleMenu对象的list
+			List<RoleMenu> list = new ArrayList<RoleMenu>();
+			list.add(rolemenu);
+			//创建一个list用来解析前端传递RoleMenu的list
+			List<RoleMenu> list1 = new ArrayList<RoleMenu>();
+			//循环list来分解传递的role_id和module_key
+			for(RoleMenu role:list){
+				//按逗号来分解role_id
+				List<String> str1 = Arrays.asList(role.getRole_id().split(","));
+				//按逗号来分解module_key
+				List<String> str2 = Arrays.asList(role.getModule_key().split(","));
+				//循环将分解的role_id和module_key存入RoleMenu对象
+				for(int i = 0 ; i < str1.size() ; i++){
+					RoleMenu rolemenu1 = new RoleMenu();
+					rolemenu1.setRole_id(str1.get(i));
+					rolemenu1.setModule_key(str2.get(i));
+					//list1存入解析好的对象
+					list1.add(rolemenu1);
+				}
+			}
+			//将list1传递给Service方法用来调用服务
+			//给角色赋予对应的菜单
+			//控制前端传空参数过来不执行服务方法的判断
+			if(list1.get(0).getRole_id().equals("") || list.get(0).getModule_key().equals("")){
+				map.put("message", "请勾选菜单选项！");
+				map.put("state", 0);
+			}else if(list.get(0).getModule_key().equals("")){
+				//判断当修改权限的时候，角色有权限的时候，一个权限都不选，就清空权限
+				rolepowerService.deleteRoleMenuService(list1.get(0).getRole_id());
+			}else{
+				rolepowerService.deleteRoleMenuService(list1.get(0).getRole_id());
+				int state = rolepowerService.addRoleMenuService(list1);
+				//判断返回值
+				if(state == 0 || state < 0){
+					map.put("message", "添加失败!");
+					map.put("state", 0);
+				}else{
+					map.put("message", "添加成功！");
+					map.put("state", 1);
+					//日志存储
+					baseaddDao.addUserOperateLog("一般操作","角色管理", "给角色赋予菜单->角色的id为："+rolemenu.getRole_id()+",菜单的key为："+rolemenu.getModule_key(), map.get("message").toString(), "true", "", "");
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			//日志存储
+			baseaddDao.addUserOperateLog("异常","角色管理", "给角色赋予菜单->角色的id为："+rolemenu.getRole_id()+",菜单的key为："+rolemenu.getModule_key(), map.get("message").toString(), "false", e.getMessage(), "");
+		}
+		return map;
+	}
+	
+	//部门模块：查看所有的部门信息
+	@RequestMapping(value = "/getAllDepartment.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Department> getAllDepartment(){
+		Logger.getLogger("").info("部门模块：查看所有的部门信息");
+		return rolepowerService.getAllDepartmentService();
+	}
+	/**
+	 * @author zzb
+	 * @description 部门考核管理：异步请求查询所有部门名称
+	 * @param 
+	 * @param 
+	 * @return resultList
+	 */
+	@RequestMapping(value = "/ajaxDeptName.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Department> ajaxDeptName(){
+		Logger.getLogger("").info("异步请求查询所有部门名称");
+		return rolepowerService.ajaxDeptName();
+	}
+	
+	// 上传图片
+	@RequestMapping(value = "/headimageUpload.do", method = RequestMethod.POST, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public String imageUpload(HttpServletRequest request) {
+		Logger.getLogger("").info("上传图片");
+		return fileUtil.fileUploadBefore(request,"headimage");
+	}
+	
+	//tb_uim_useroperate_log日志管理，查询日志列表
+	@RequestMapping(value = "/getUserOperateLogList.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<UserOperateLog> getUserOperateLogList(HttpServletRequest request){
+		Logger.getLogger("").info("日志管理:查询日志列表");
+		//keyword关键字
+		String keyword = (request.getParameter("keyword") == null || "".equals(request.getParameter("keyword"))) ? "" : request.getParameter("keyword");
+		//logtype日志类型
+		String logtype = (request.getParameter("logtype") == null || "".equals(request.getParameter("logtype"))) ? "" : request.getParameter("logtype");
+		//begintime起始时间
+		String begintime = (request.getParameter("begintime") == null || "".equals(request.getParameter("begintime"))) ? "" : request.getParameter("begintime");
+		//endtime起始时间
+		String endtime = (request.getParameter("endtime") == null || "".equals(request.getParameter("endtime"))) ? "" : request.getParameter("endtime");
+		return rolepowerService.getUserOperateLogListService(keyword, logtype, begintime, endtime);
+	}
+}

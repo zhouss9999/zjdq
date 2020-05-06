@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.countanalysis.mapping.Countmapper">
+
+	<!-- 获取城市下区域名称列表 -->
+	<select id="getAreaName" parameterType="String" resultType="String">
+		select distinct fieldvalue as arsiname from cp_attach_infostore where fieldid in (16010001)
+			and objid in (select objid from cp_attach_infostore where 
+				(fieldid in (16010003) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{_parameter}),'%'))
+			)
+		order by fieldvalue
+	</select>
+	
+	<!-- 区域站点统计 -->
+	<select id="getAreaSiteCount" parameterType="String" resultType="wy.qingdao_atmosphere.countanalysis.domain.AreaSiteCount">
+		select area.fieldvalue as areaname,count(site.fieldvalue) sitenum from
+			(select fieldvalue from cp_attach_infostore where fieldid in (16010001)
+			and objid in (
+				select objid from cp_attach_infostore where (fieldid in (16010003) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{_parameter}),'%'))
+			)
+			order by objid,fieldid) area
+			left join
+			(select fieldvalue from cp_attach_infostore where fieldid in (1010007)
+			and objid in (
+				select objid from cp_attach_infostore where (fieldid in (1010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{_parameter}),'%'))
+			)
+			order by objid,fieldid) site
+			on area.fieldvalue = site.fieldvalue
+		group by areaname
+		order by sitenum desc
+	</select>
+	
+	<!-- 获取对象基本信息列表 -->
+	<select id="getCountObjInfo" parameterType="map" resultType="wy.util.datapersistence.ModelAssist">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from 
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		and b.tableid = c.tableid and c.objtypeid in (${objtypeid})
+		
+		<!-- 通过城市获取站点 -->
+		<if test="city != null and city != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid in (1010006,5010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+			) 
+		</if> 
+		
+		<!-- 通过区域获取站点 -->
+		<if test="area != null and area != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid in (1010007,5010007) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{area}),'%'))
+			)
+		</if>
+		
+		order by objid desc,fieldid
+	</select>
+</mapper>

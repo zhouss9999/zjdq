@@ -1,0 +1,64 @@
+package wy.qingdao_atmosphere.onemap.service;
+
+import java.io.StringWriter;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+import wy.qingdao_atmosphere.onemap.domain.OmRank;
+import wy.qingdao_atmosphere.onemap.domain.WeatherData;
+import wy.util.datapersistence.SpaceInfo;
+
+public interface OneMapService {
+	
+	//获取目录列表
+	public List<OmMenu> getOmMenuList();
+	
+	//获取站点空气质量数据
+	public List<KqzlColl> getOmAllSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap);
+	
+	//获取站点基本信息列表及坐标信息(mark:标记,国站:gz, 微站:wz, 辐射:fs, 探空:tk)
+	public Map<String, Object> getOmSiteGeom(HttpServletRequest request, String mark);
+	
+	//获取国站空气质量数据
+	public List<KqzlColl> getOmGzSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap);
+	
+	//获取微站空气质量数据
+	public List<KqzlColl> getOmWzSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap);
+	
+	//微波辐射监测数据(时间格式：yyyy-MM-dd)
+	public Map<String, Object> omFsData(HttpServletRequest request, String datastreamIds, String paramid);
+	
+	//微波辐射监测实时数据(时间格式：yyyy-MM-dd HH:mm:ss)
+	public Map<String, Object> omFsDataSecond(HttpServletRequest request, String datastreamIds, String paramid);
+	
+	//获取所有站点基本信息列表及坐标信息(mark:标记,热点分析:rd, 精细化:jx,卫星云图：wx, 搜索：search)
+	public Map<String, Object> getOmAllSiteGeom(HttpServletRequest request, String mark);
+	
+	//获取站点基本信息+图片信息列表
+	public List<Map<String, Object>> getOmPicList(HttpServletRequest request, String objtypeid);
+	
+	//获取站点近30天的优良率
+	public Map<String, Object> getOmSiteYll(HttpServletRequest request);
+	
+	//按站点排名(timetype:hour小时,day天,month月)
+	public List<OmRank> omRankBySite(HttpServletRequest request, String timetype);
+
+	//按区域排名(timetype:hour小时,day天,month月)
+	public List<OmRank> omRankByArea(HttpServletRequest request, String timetype);
+
+	//获取气象监测站空间数据
+	public List<SpaceInfo> getQXJCZGeomList(String space_tablename,String objid);
+	
+	//获取气象监测站点基本信息列表及坐标信息
+	public StringWriter getQXOmSiteGeom(HttpServletRequest request);
+	
+	//获取气象监测站实时和历史监测数据
+	public List<WeatherData> getWeatherJCZMonitorData(HttpServletRequest request);
+	
+	//热点分析-空间差值图片信息
+	public Map<String, Object> omRdSpatialDv (HttpServletRequest request);
+}

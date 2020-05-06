@@ -1,0 +1,27 @@
+package wy.qingdao_atmosphere.countanalysis.dao;
+
+import java.util.List;
+
+import javax.annotation.Resource;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.support.SqlSessionDaoSupport;
+import org.springframework.stereotype.Repository;
+
+import wy.qingdao_atmosphere.countanalysis.domain.AreaSiteCount;
+
+@Repository("countDao")
+public class CountDaoImpl extends SqlSessionDaoSupport implements CountDao {
+	@Resource
+	public void setSuperSessionFactory(SqlSessionFactory sessionFactory) {
+		this.setSqlSessionFactory(sessionFactory);
+	}
+
+	public List<String> getAreaName(String city) {
+		return this.getSqlSession().selectList("getAreaName", city);
+	}
+
+	public List<AreaSiteCount> getAreaSiteCount(String city) {
+		return this.getSqlSession().selectList("getAreaSiteCount", city);
+	}
+}

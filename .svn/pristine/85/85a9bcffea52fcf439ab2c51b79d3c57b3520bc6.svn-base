@@ -1,0 +1,52 @@
+package wy.qingdao_atmosphere.countrysitedata.service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import wy.qingdao_atmosphere.countrysitedata.dao.SiteDataDao;
+import wy.qingdao_atmosphere.countrysitedata.domain.Param;
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.countrysitedata.domain.SiteData;
+
+@Service("siteDataService")
+public class SiteDataServiceImpl implements SiteDataService {
+
+	@Autowired
+	private SiteDataDao siteDataDao;
+
+	public int addCollectData(List<SiteData> list) {
+		return siteDataDao.addCollectData(list);
+	}
+
+	public List<Param> getParamByDtid(String devicetypeid) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("devicetypeid", devicetypeid);
+		return siteDataDao.getParamByDtid(map);
+	}
+
+	public List<ParamAssis> getParamAssisByDtid(String devicetypeid) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("devicetypeid", devicetypeid);
+		return siteDataDao.getParamAssisByDtid(map);
+	}
+
+	public int delCollData(String collecttime, String devicetypeid) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("collecttime", collecttime);
+		map.put("devicetypeid", devicetypeid);
+		return siteDataDao.delCollData(map);
+	}
+
+	public String getsubStoreMaxtime(String objid, String fieldid, String timeformat) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objid", objid);
+		map.put("fieldid", fieldid);
+		map.put("timeformat", timeformat);
+		return siteDataDao.getsubStoreMaxtime(map);
+	}
+
+}

@@ -1,0 +1,1246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.datacenter.mapping.DataCentermapper">
+	<!-- 数据中心：参数管理 -->
+	<select id="getAllParam" parameterType="map" resultType="wy.qingdao_atmosphere.datacenter.domain.Param">
+		select paramid,paramtype,paramname,datatype,dataunit from cp_info_param where 1=1
+		<if test="dataname !='' and dataname!= null">
+			and ( paramname like '%${dataname}%' 
+			or dataunit like '%${dataname}%' )
+		</if>
+		<if test="paramname!='' and paramname!= null">
+			and paramname = #{paramname}
+		</if>
+		<if test="paramid!='' and paramid!= null">
+			and paramid = #{paramid}
+		</if>
+		<if test="isused!='' and isused!=null ">
+			and isused = ${isused}
+		</if>
+	</select>
+	<!-- 参数管理 新增 -->
+	<insert id="addParam" parameterType="wy.qingdao_atmosphere.datacenter.domain.Param">
+		insert into cp_info_param(paramid,paramtype,paramname,datatype,dataunit,isused,paramnumber) 
+		values(nextval('cp_info_param_id_seq'),#{paramtype},#{paramname},#{datatype},#{dataunit},'1','')
+	</insert>
+	
+	<!-- 参数管理 修改 -->
+	<update id="updateParam" parameterType="wy.qingdao_atmosphere.datacenter.domain.Param">
+		update cp_info_param set paramtype = #{paramtype},paramname=#{paramname},datatype=#{datatype},dataunit=#{dataunit} where paramid = ${paramid} 
+	</update>
+	
+	<!-- 参数管理 批量删除或恢复 _parameter-->
+	<update id="delparamid" parameterType="map">
+		update cp_info_param set isused=${isused} where paramid in(${paramid})
+	</update>
+	
+	<!-- 对象类型管理 查询 -->
+	<select id="queryObjtype" parameterType="map" resultType="wy.qingdao_atmosphere.datacenter.domain.Objtype">
+		select * from cp_info_objtype where 1 = 1
+		<if test="objtypename!='' and objtypename !=null ">
+			and objtypename like '%${objtypename}%' 
+		</if> 
+		<if test="isused!='' and isused!=null ">
+			and isused = ${isused}
+		</if>
+		<if test="isobjtypename!='' and isobjtypename!=null ">
+			and objtypename = #{isobjtypename}
+		</if>
+		order by objtypeid desc
+	</select>
+	<!-- 对象类型管理 新增  -->
+	<select id="addObjtype" parameterType="wy.qingdao_atmosphere.datacenter.domain.Objtype">
+		insert into cp_info_objtype(objtypeid,objtypename,spacetypename,spacelayername,isshow,ismove,isused,remark) 
+		values((select COALESCE(max(objtypeid),0)+1 from cp_info_objtype),#{objtypename},#{spacetypename},#{spacelayername},0,0,1,#{remark});
+		
+		CREATE TABLE public.${spacelayername}
+		(
+		  objid bigint,
+		  id bigint,
+		  shape geometry(
+		  <if test="spacetypename == '点'.toString()">POINT</if>
+		  <if test="spacetypename == '线'.toString()">LINESTRING</if>
+		  <if test="spacetypename == '面'.toString()">POLYGON</if>,4326)
+		)
+		WITH (
+		  OIDS=FALSE
+		);
+		ALTER TABLE public.${spacelayername}
+		  OWNER TO postgres;
+		COMMENT ON TABLE public.${spacelayername}
+  		IS '${remark}';
+  		COMMENT ON COLUMN public.${spacelayername}.objid IS '对象ID';
+		COMMENT ON COLUMN public.${spacelayername}.id IS '主键ID';
+		COMMENT ON COLUMN public.${spacelayername}.shape IS '空间类型';
+	</select>
+	<!-- 对象类型管理 删除或恢复 -->
+	<update id="delObjtype" parameterType="map">
+		update cp_info_objtype set isused=${isused} where objtypeid in(${objtypeid})
+	</update>
+	<!-- 对象类型管理 修改 -->
+	<select id="updateObjtype" parameterType="wy.qingdao_atmosphere.datacenter.domain.Objtype">
+		update cp_info_objtype set objtypename = #{objtypename}, remark = #{remark} where objtypeid = ${objtypeid}
+	</select>
+	<!-- 对象类型    对象安装设备  列表查询-->
+	<select id="queryObjInfo" parameterType="map" resultType="map">
+		select DISTINCT a.objid,a.objtypeid,a.objname,COALESCE(b.devicenumber,'') as devicenumber ,COALESCE(c.devicename,'') as devicename,COALESCE(c.rmk1,'') as rmk1,c.devicetypeid,d.devicetypename
+		from cp_info_obj a 
+		left join cp_connect_objparam b on a.objid = b.objid and b.isused=1 
+		left join cp_info_device c on b.devicenumber = c.devicenumber
+		left join cp_info_devicetype d on d.devicetypeid = c.devicetypeid
+		where 1=1
+		<if test="objtypeid!=null and objtypeid!='' ">
+			and objtypeid = ${objtypeid}
+		</if>
+		<if test="objid!=null and objid!=''">
+			and a.objid in (${objid})
+		</if>
+		<if test="devicenumber!=null and devicenumber!=''">
+			and b.devicenumber = #{devicenumber}
+		</if>
+		order by a.objid desc
+	</select>
+	<!-- 对象类型    对象安装设备  参数查询-->
+	<select id="queryDeviceInfo" parameterType="String" resultType="map">
+		select a.paramid,a.devicetypeid,d.devicenumber
+		from cp_connect_devicetypeparam a 
+		left join cp_info_device d on a.devicetypeid = d.devicetypeid
+		where d.devicenumber= #{_parameter}
+	</select>
+	<!-- 对象类型  对象安装设备  安装 -->
+	<insert id="addObjinfo" parameterType="list">
+		insert into cp_connect_objparam(connectid,objid,paramid,dataguid,isused,devicenumber)
+		values
+		<foreach item="item" collection="list" separator=","  close=";" index="index">
+			(nextval('cp_connect_objparam_id_seq'),${item.objid},${item.paramid},#{item.dataguid},1,#{item.devicenumber})
+		</foreach>
+	</insert>
+	<!-- 对象类型  对象安装设备  安装 查询曾经删除过的数据 -->
+	<select id="queryObjNotUsed" parameterType="map" resultType="map">
+		select *from cp_connect_objparam where objid in (${objids}) and devicenumber = #{devicenumber} and isused = 0
+	</select>
+	<!-- 对象类型  对象安装设备  恢复已删除的数据 -->
+	<select id="recoveryObj" parameterType="String">
+		update cp_connect_objparam set isused = 1 where connectid in (${_parameter})
+	</select>
+	
+	<!-- 对象类型 对象安装  设备下拉列表查询 bug*-->
+	<select id="querydeviceName" parameterType="map" resultType="map">
+		select distinct a.devicenumber,a.devicename from cp_info_device a
+		left join cp_connect_objparam b on a.devicenumber = b.devicenumber and b.isused = 1
+		where devicetypeid=${devicetypeid}
+	</select>
+	
+	<!-- 对象类型 对象卸载 -->
+	<update id="delObjinfo" parameterType="map">
+		update cp_connect_objparam set isused = ${isused} where objid = ${objid} and devicenumber = #{devicenumber}
+	</update>
+	
+	<!-- 设备管理  设备类型管理  查询 -->
+	<select id="queryDevicetype" parameterType="map" resultType="wy.qingdao_atmosphere.datacenter.domain.Devicetype">
+		select *from cp_info_devicetype where 1=1
+		<if test="dataname!=null and dataname!='' ">
+			and ( devicetypename like '%${dataname}%'
+			or pinpai like '%${dataname}%'
+			or xinghao like '%${dataname}%' )
+		</if>
+		<if test="isused!=null and isused!=''">
+			and isused = ${isused}
+		</if>
+		order by devicetypeid desc
+	</select>
+	<!-- 设备类型管理  添加 -->
+	<insert id="addDevicetype" parameterType="wy.qingdao_atmosphere.datacenter.domain.Devicetype">
+		insert into cp_info_devicetype (devicetypeid,devicetypename,pinpai,xinghao,isused)
+		values((select COALESCE(max(devicetypeid),0)+1 from cp_info_devicetype),#{devicetypename},#{pinpai},#{xinghao},1)
+	</insert>
+	<!-- 设备类型管理 修改 -->
+	<update id="updateDevicetype" parameterType="wy.qingdao_atmosphere.datacenter.domain.Devicetype">
+		update cp_info_devicetype set devicetypename = #{devicetypename},pinpai = #{pinpai},xinghao = #{xinghao} where devicetypeid = #{devicetypeid}
+	</update>
+	<!-- 设备类型管理 删除或恢复 -->
+	<update id="delDevicetype" parameterType="map">
+		update cp_info_devicetype set isused = ${isused} where devicetypeid in (${devicetypeid}) 
+	</update>
+	
+	<!-- 设备类型管理  设备版本添加 -->
+	<insert id="addDevVersion" parameterType="map">
+		insert into cp_info_deviceversion(verid,devicetypeid,version,file,collecttime)
+		values((select COALESCE(max(verid),0)+1 from cp_info_deviceversion),${devicetypeid},#{version},#{file},(#{collecttime})::timestamp)
+	</insert>
+	<!-- 设备类型管理  设备版本查询 -->
+	<select id="queryDevVersion" parameterType="map" resultType="map">
+		select verid,version,file,collecttime from cp_info_deviceversion where 1=1
+		<if test="devicetypeid!=null and devicetypeid!=''">
+			and devicetypeid = ${devicetypeid}
+		</if>
+		<if test="version!=null and version!=''">
+			and version = #{version}
+		</if>
+		<if test="verid!=null and verid!=''">
+			and verid not in(${verid})
+		</if>
+	</select>
+	<!-- 设备类型管理  设备版本修改 -->
+	<update id="updateDevVersion" parameterType="map">
+		update cp_info_deviceversion set version = #{version} ,
+		<if test="file!=null and file!=''">
+			file=#{file} ,
+		</if>
+		 collecttime=#{collecttime} where verid = ${verid}
+	</update>
+	<!-- 设备类型管理  设备版本删除 -->
+	<delete id="delDevVersion" parameterType="String">
+		delete from cp_info_deviceversion where verid = ${_parameter}
+	</delete>
+	
+	<!-- 设备管理 查询 -->
+	<select id="queryDevice" parameterType="map" resultType="map">
+		select COALESCE(a.using,'') as version,COALESCE(a.rmk1,'') as rmk1,COALESCE(a.position,'') as position,a.deviceid,a.devicetypeid, a.devicenumber,a.devicename,b.devicetypename,b.pinpai,b.xinghao,a.isentity from cp_info_device a left join cp_info_devicetype b on a.devicetypeid = b.devicetypeid where 1=1
+		<if test="devicetypename!='' and devicetypename!=null">
+			and b.devicetypename = #{devicetypename} 
+		</if>
+		<if test="devicename!='' and devicename!=null">
+			and a.devicename = #{devicename} 
+		</if>
+		<if test="isused!='' and isused!=null">
+			and a.isused = ${isused} 
+		</if>
+		<if test="devicenumber!='' and devicenumber!=null ">
+			and a.devicenumber = #{devicenumber} 
+		</if>
+		<if test="deviceid!=null and deviceid!='' ">
+			and a.deviceid = ${deviceid} 
+		</if>
+		<if test="position!=null and position!='' ">
+			and a.position = #{position} 
+		</if>
+		<if test="devicetypeid!=null and devicetypeid!=''">
+			and b.devicetypeid = ${devicetypeid} 
+		</if>
+		order by deviceid desc
+	</select>
+	<!-- 设备管理  设备类型查询 -->
+	<select id="querydevicetypemap" resultType="map">
+		select devicetypeid,devicetypename from cp_info_devicetype where isused =1 order by devicetypeid 
+	</select>
+	<!-- 设备管理  设备名称查询 -->
+	<select id="queryDeviceNameMap" resultType="map" parameterType="int">
+		select deviceid,devicename from cp_info_device where devicetypeid = ${_parameter}
+	</select>
+	<!-- 设备管理 添加 -->
+	<insert id="addDevice" parameterType="map">
+		insert into cp_info_device(deviceid,devicetypeid,devicenumber,devicename,isused,isentity,rmk1,position)
+		values((select COALESCE(max(deviceid),0)+1 from cp_info_device),${devicetypeid},#{devicenumber},#{devicename},1,${isentity},#{key},#{position})
+	</insert>
+	<!-- 设备管理  修改 -->
+	<update id="updateDevice" parameterType="map">
+		update cp_info_device set 
+		<if test="devicetypeid!=null and isentity!=null and devicename!=null">
+			devicetypeid = ${devicetypeid},devicename = #{devicename},isentity = ${isentity}
+		</if>
+		<if test="using!=null">
+			"using" = #{using}
+		</if>
+		 where deviceid = ${deviceid}
+	</update>
+	<!-- 设备管理 删除 或 恢复 -->
+	<update id="delDevice" parameterType="map">
+		update cp_info_device set isused=${isused} where deviceid in(${deviceid});
+		<!-- 删除绑定参数 -->
+		
+	</update>
+	<!-- 设备参数管理  列表查询 -->
+	<select id="queryDevicetypeParam" parameterType="map" resultType="map">
+		select a.connectid,c.devicetypeid,c.devicetypename,b.paramname,b.dataunit 
+		from cp_connect_devicetypeparam a 
+		left join cp_info_param b on a.paramid = b.paramid 
+		left join cp_info_devicetype c on a.devicetypeid = c.devicetypeid
+		where 1 = 1
+		<if test="isused!='' and isused!=null ">
+			and a.isused = ${isused}
+		</if>
+		<if test="devicetypeid!=null and devicetypeid!='' ">
+			and a.devicetypeid = ${devicetypeid}
+		</if>
+		<if test="paramname!=null and paramname!='' ">
+			and b.paramname like '%${paramname}%'
+		</if>
+		order by a.connectid desc
+	</select>
+	<!-- 设备参数管理  添加 参数查询 -->
+	<select id="queryParambyDT" parameterType="map" resultType="map">
+		select *from cp_info_param where paramid not in(select paramid from cp_connect_devicetypeparam where devicetypeid = ${devicetypeid}) and isused = 1
+	</select>
+	<!-- 设备参数管理  添加 -->
+	<insert id="addDeviceTypeParam" parameterType="map">
+		insert into cp_connect_devicetypeparam(connectid,devicetypeid,paramid,isused) values
+		<foreach item="item" collection="paramids" separator=","  close=";" index="index">
+			((select COALESCE(max(connectid),0)+1+${index} from cp_connect_devicetypeparam),${devicetypeid},${item},1)
+		</foreach>
+	</insert>
+	<!-- 设备参数管理  修改页面的查询 -->
+	<select id="queryDP" parameterType="int" resultType="map">
+		select COALESCE(b.connectid,-1) as connectid,a.paramid, a.paramname,COALESCE(b.isused,-1) as state 
+		from cp_info_param a 
+		left join cp_connect_devicetypeparam b on a.paramid=b.paramid and b.devicetypeid = ${_parameter} 
+		where a.isused=1
+	</select>
+	<!-- 设备参数管理  删除或恢复 -->
+	<update id="deldevicetypeparam" parameterType="map">
+		update cp_connect_devicetypeparam set isused = ${isused}  where connectid in (${connectid})
+	</update>
+	<!-- 对象管理   列表查询 -->
+	<select id="queryObj" parameterType="map" resultType="map">
+		<!--select objid,objtypeid,objname from cp_info_obj where 1=1 -->
+		select objid,a.objtypeid,objname,b.objtypename from cp_info_obj a left join cp_info_objtype b on a.objtypeid=b.objtypeid where 1=1
+		<if test="objtypeid!=null and objtypeid!=''">
+			and a.objtypeid =${objtypeid}
+		</if>
+		<if test="isused!=null and isused!=''">
+			and a.isused = ${isused}
+		</if>
+		<if test="objname!=null and objname!=''">
+			and objname = #{objname}
+		</if>
+		order by objid desc
+	</select>
+	<!-- 对象管理   基本信息查询 -->
+	<select id="queryInformation" parameterType="map" resultType="map">
+		<!--select a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue,c.fieldname,c.fieldshowname 
+		from cp_attach_infostore a 
+		left join cp_info_obj b on a.objid=b.objid 
+		left join cp_config_tableinfo c on a.fieldid=c.fieldid
+		left join cp_config_tableinfoadd d on c.tableid = d.tableid
+		where d.tabletype = '基本表' and c.isused = 1 and d.isused = 1 and b.isused = 1-->
+		select distinct c.objid,a.fieldid,a.fieldname,a.fieldshowname ,d.fieldvalue from cp_config_tableinfo a
+		left join cp_config_tableinfoadd b on a.tableid = b.tableid
+		left join cp_info_obj c on b.objtypeid = c.objtypeid
+		left join cp_attach_infostore d on a.fieldid=d.fieldid
+		where 1=1 
+		<if test="objid!=null and objid!=''">
+			and c.objid=${objid} 
+		</if>
+		order by fieldid
+	</select>
+	<!-- 对象管理   基本信息查询 修改时查询-->
+	<select id="queryInformation2" parameterType="map" resultType="map">
+		select a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue,c.fieldname,c.fieldshowname 
+		from cp_attach_infostore a 
+		left join cp_info_obj b on a.objid=b.objid 
+		left join cp_config_tableinfo c on a.fieldid=c.fieldid
+		left join cp_config_tableinfoadd d on c.tableid = d.tableid
+		where d.tabletype = '基本表' and c.isused = 1 and d.isused = 1 and b.isused = 1
+		<if test="objid!=null and objid!=''">
+			and a.objid=${objid} 
+		</if>
+		order by fieldid
+	</select>
+	
+	
+	<!-- 地理位置查询 -->
+	<select id="queryobjdt" parameterType="map" resultType="map">
+		select objid ,st_AsText(shape) as shape from ${tablename} where objid = ${objid}
+	</select>
+	<!-- 地理位置修改 -->
+	<update id="updateobjdt" parameterType="map">
+		<if test="spacetypename == '点'.toString()">
+			update ${tablename} set shape = GeomFromEWKT('SRID=4326;POINT(${shape})') where objid = ${objid}
+		</if>
+		<if test="spacetypename == '线'.toString()">
+			update ${tablename} set shape = GeomFromEWKT('SRID=4326;LINESTRING(${shape})') where objid = ${objid}
+		</if>
+		<if test="spacetypename == '面'.toString()">
+			update ${tablename} set shape = GeomFromEWKT('SRID=4326;POLYGON(${shape})') where objid = ${objid}
+		</if>
+	</update>
+	<!-- 地理位置添加 -->
+	<insert id="addobjdt" parameterType="map">
+		<if test="spacetypename == '点'.toString()">
+			insert into ${tablename}(objid,id,shape)
+			values(${objid},${objid},GeomFromEWKT('SRID=4326;POINT(${shape})'));
+		</if>
+		<if test="spacetypename == '线'.toString()">
+			insert into ${tablename}(objid,id,shape)
+			values(${objid},${objid},GeomFromEWKT('SRID=4326;LINESTRING(${shape})'));
+		</if>
+		<if test="spacetypename == '面'.toString()">
+			insert into ${tablename}(objid,id,shape)
+			values(${objid},${objid},GeomFromEWKT('SRID=4326;POLYGON(${shape})'));
+		</if>
+	</insert>
+	<!-- 该对象类型有哪些字表 -->
+	<select id="queryObjZB" parameterType="String" resultType="map">
+		select tableid,tableshowname from cp_config_tableinfoadd where objtypeid = ${_parameter} and tabletype='子表' and isused = 1
+	</select>
+	<!-- 对象管理 子表信息查询 -->
+	<select id="queryZBInformation" parameterType="map" resultType="map">
+		select a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue,c.fieldname,c.fieldshowname 
+		from cp_attach_subinfostore a 
+		left join cp_info_obj b on a.objid=b.objid 
+		left join cp_config_tableinfo c on a.fieldid=c.fieldid
+		left join cp_config_tableinfoadd d on c.tableid = d.tableid
+		where d.tabletype = '子表' and c.isused = 1 and d.isused = 1 and b.isused = 1
+		<if test="objid!=null and objid!=''">
+			and a.objid=${objid} 
+		</if>
+		<if test="tableid!=null and tableid!=''">
+			and d.tableid = ${tableid}
+		</if>
+		order by fieldid
+	</select>
+	<!-- 对象管理   -->
+	<insert id="addObj" parameterType="map">
+		insert into cp_info_obj(objid,objtypeid,objname,objnum,remark,isused)
+		values(nextval('cp_info_obj_id_seq'),${objtypeid},#{objname},'','',1);
+		<if test="spacetypename == '点'.toString()">
+			insert into ${tablename}(objid,id,shape)
+			values(CURRVAL('cp_info_obj_id_seq'),CURRVAL('cp_info_obj_id_seq'),GeomFromEWKT('SRID=4326;POINT(${shape})'));
+		</if>
+		<if test="spacetypename == '线'.toString()">
+			insert into ${tablename}(objid,id,shape)
+			values(CURRVAL('cp_info_obj_id_seq'),CURRVAL('cp_info_obj_id_seq'),GeomFromEWKT('SRID=4326;LINESTRING(${shape})'));
+		</if>
+		<if test="spacetypename == '面'.toString()">
+			insert into ${tablename}(objid,id,shape)
+			values(CURRVAL('cp_info_obj_id_seq'),CURRVAL('cp_info_obj_id_seq'),GeomFromEWKT('SRID=4326;POLYGON(${shape})'));
+		</if>
+	</insert>
+	<!-- 对象管理  查询表空间 -->
+	<select id="querySpace" parameterType="map" resultType="map">
+		select spacetypename,spacelayername from cp_info_objtype 
+		<if test="objid!=null and objid!='' ">
+			a left join cp_info_obj b on a.objtypeid=b.objtypeid 
+		</if>
+		where 1=1 
+		<if test="objtypeid!=null and objtypeid!=''">
+			and objtypeid = ${objtypeid}
+		</if>
+		<if test="objid!=null and objid!='' ">
+			and b.objid = ${objid}
+		</if>
+	</select>
+	<!-- 对象管理 新增基本信息 -->
+	<insert id="insertInfostore" >
+		insert into cp_attach_infostore (infoid,objid,fieldid,fieldvalue) values
+		<foreach item="item" collection="list" separator=","  close=";" index="index">
+			(nextval('cp_attach_infostore_id_seq'),${item.objid},(
+				select fieldid from cp_config_tableinfo a
+				left join cp_config_tableinfoadd b on a.tableid = b.tableid
+				left join cp_info_obj c on b.objtypeid = c.objtypeid
+				where b.tabletype='基本表' and objid = ${item.objid} and fieldname = #{item.fieldname}
+			),#{item.fieldvalue})
+		</foreach>
+	</insert>
+	<!-- 对象管理 新增子表信息 -->
+	<insert id="insertZBInfostore" >
+		insert into cp_attach_subinfostore (subinfoid,objid,fieldid,fieldvalue) values
+		<foreach item="item" collection="list" separator=","  close=";" index="index">
+			(nextval('cp_attach_subinfostore_subinfoid_seq'),${item.objid},(
+				select fieldid from cp_config_tableinfo a
+				left join cp_config_tableinfoadd b on a.tableid = b.tableid
+				left join cp_info_obj c on b.objtypeid = c.objtypeid
+				where b.tabletype='子表' and objid = ${item.objid} and fieldname = #{item.fieldname} 
+				and b.tableid = ${item.tableid}
+			),#{item.fieldvalue})
+		</foreach>
+	</insert>
+	<!-- 对象管理 修改基本信息 -->
+	<update id="updateInfostore">
+		<foreach item="item" collection="list" separator=";"  close=";" index="index">
+			update cp_attach_infostore set  fieldvalue = #{item.fieldvalue}
+			where objid = ${item.objid}
+			and fieldid = (select fieldid from cp_config_tableinfo where fieldname = #{item.fieldname} and tableid = (select tableid from cp_config_tableinfoadd a left join cp_info_obj b on a.objtypeid=b.objtypeid 
+			where a.tabletype='基本表' and b.objid=${item.objid}))
+		</foreach>
+	</update>
+	<!-- 对象管理 修改基本信息 -->
+	<update id="updateZBInfostore">
+		<foreach item="item" collection="list" separator=";"  close=";" index="index">
+			update cp_attach_subinfostore set  fieldvalue = #{item.fieldvalue}
+			where objid = ${item.objid}
+			and fieldid = (
+				select fieldid from cp_config_tableinfo a
+				left join cp_config_tableinfoadd b on a.tableid = b.tableid
+				left join cp_info_obj c on b.objtypeid = c.objtypeid
+				where b.tabletype='子表' and objid = ${item.objid} and fieldname = #{item.fieldname} 
+				and b.tableid = ${item.tableid}
+			)
+		</foreach>
+	</update>
+	<!-- 对象管理  查询对象基本表字段 -->
+	<select id="queryFieldName" parameterType="string" resultType="map">
+		select a.fieldname from cp_config_tableinfo a
+		left join cp_config_tableinfoadd b on a.tableid = b.tableid
+		left join cp_info_obj c on b.objtypeid = c.objtypeid
+		where b.tabletype='基本表' and objid = ${_parameter}
+	</select>
+	<!-- 对象管理 查询对象子表字段 -->
+	<select id="queryZBFieldName" parameterType="map" resultType="map">
+		select a.fieldname from cp_config_tableinfo a
+		left join cp_config_tableinfoadd b on a.tableid = b.tableid
+		left join cp_info_obj c on b.objtypeid = c.objtypeid
+		where b.tabletype='子表' and objid = ${objid} and b.tableid = ${tableid}
+	</select>
+	<!-- 对象管理   删除对象 -->
+	<update id="delObj" parameterType="map">
+		update cp_info_obj set isused = ${isused} where objid in (${objids});
+		<if test="isused==0"> 
+			delete from cp_attach_infostore where objid in (${objids});
+			delete from cp_attach_subinfostore where objid in (${objids});
+		</if>
+	</update>
+	<!-- 字表数据查询 -->
+	<select id="queryZbInfo" resultType="wy.util.datapersistence.AttachSubinfoStore" parameterType="map">
+		select b.tableid, b.fieldname,a.* from cp_attach_subinfostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid and b.tableid = c.tableid
+		<if test="objid!=null and objid!=''">
+			and a.objid in (${objid})
+		</if> 
+		<if test="tableid!=null and tableid!=''">
+			and b.tableid = ${tableid}
+		</if>
+	</select>
+	<!-- 查询对应字段信息 -->
+	<select id="queryFieldshowname" parameterType="map" resultType="map">
+		select a.tableid,b.tableshowname,a.fieldname,a.fieldshowname ,a.fielddatatype from cp_config_tableinfo a
+		left join cp_config_tableinfoadd b on a.tableid = b.tableid
+		left join cp_info_obj c on b.objtypeid = c.objtypeid
+		where 1=1
+		<if test="tabletype!=null and tabletype!=''">
+			and b.tabletype=#{tabletype}
+		</if>
+		<if test="objid!=null and objid!=''">
+			and objid = ${objid}
+		</if>
+		<if test="tableid!=null and tableid!=''">
+			and a.tableid = ${tableid}
+		</if>
+	</select>
+	
+	<!-- 实时数据查询 -->
+	<select id="queryActualData" parameterType="map" resultType="map">
+		select *from cp_collect_actual where dataguid = (select a.dataguid from cp_connect_objparam a left join cp_info_param b on a.paramid=b.paramid
+		where a.isused=1 and a.devicenumber=#{devicenumber}  and b.paramname = #{paramname} limit 1)
+	</select>
+	<!-- 添加触发器接收到的数据 -->
+	<insert id="addwzData" parameterType="map">
+		insert into cp_collect_actual(dataid,dataguid,datavalue,collecttime)
+		values(nextval('cp_collect_actual_id_seq'),(select a.dataguid from cp_connect_objparam a left join cp_info_param b on a.paramid=b.paramid
+		where a.isused=1 and a.devicenumber=#{devicenumber}  and b.paramname = #{paramname} and a.objid = ${objid} limit 1),#{datavalue},(#{collecttime})::timestamp)
+	</insert>
+	<!-- 修改触发器接收到的值 -->
+	<update id="updateTriggerData" parameterType="map">
+		update cp_collect_actual set datavalue = #{datavalue} ,collecttime = (#{collecttime})::timestamp where dataid = ${dataid}
+	</update>
+	<!-- 查询站点对应参数 -->
+	<select id="getobjParam" parameterType="String" resultType="map">
+		select b.paramid,paramname from cp_connect_objparam a left join cp_info_param b on a.paramid = b.paramid
+		where objid = ${_parameter}
+	</select>
+	<!-- 添加阈值 -->
+	<insert id="addThreshold" parameterType="map">
+		insert into cp_config_threshold(thresholdid,objid,paramid,val)
+		values((select COALESCE(max(thresholdid),0)+1 from cp_config_threshold),${objid},${paramid},#{val})
+	</insert>
+	<!-- 查询报警阈值 -->
+	<select id="queryThreshold" parameterType="map" resultType="map">
+		select a.thresholdid,b.objname,c.paramname,a.val,a.objid,a.paramid from cp_config_threshold a left join cp_info_obj b on a.objid=b.objid
+		left join cp_info_param c on a.paramid = c.paramid where 1=1
+		<if test="objid!=null and objid!=''">
+			and a.objid = ${objid}
+		</if>
+		<if test="objName!=null and objName!=''">
+			and objname like '%${objName}%'
+		</if>
+		<if test="paramName!=null and paramName!=''">
+			and paramname like '%${paramName}%'
+		</if>
+		<if test="thresholdid!=null and thresholdid!=''">
+			and thresholdid = ${thresholdid}
+		</if>
+	</select>
+	<!-- 删除报警阈值 -->
+	<delete id="delThreshold" parameterType="String">
+		delete from cp_config_threshold where thresholdid in (${_parameter})
+	</delete>
+	<!-- 修改阈值 -->
+	<update id="updateThreshold" parameterType="map">
+		update cp_config_threshold set val = #{val} where thresholdid = ${thresholdid}
+	</update>
+	<!-- 报警    新增报警-->
+	<insert id="addthrinfo" parameterType="map">
+		insert into cp_info_threshold(thrid,objid,collecttime,paramid,value,thresholdval,describe)
+		values((select COALESCE(max(thrid),0)+1 from cp_info_threshold),${objid},(#{collecttime})::timestamp,${paramid},#{value},#{thresholdval},#{describe})
+	</insert>
+	<!-- 报警   查询 -->
+	<select id="queryThr" parameterType="map" resultType="map">
+		select distinct a.objid,b.objname,c.paramname,c.dataunit,a.value,a.thresholdval,a.collecttime,a.describe,f.fieldvalue
+ 		from cp_info_threshold a 
+		left join cp_info_obj b on a.objid = b.objid
+		left join cp_info_param c on a.paramid = c.paramid
+		left join cp_config_tableinfoadd d on b.objtypeid= d.objtypeid
+		left join cp_config_tableinfo e on d.tableid = e.tableid
+		left join cp_attach_infostore f on e.fieldid = f.fieldid
+		where e.fieldname = 'monitortype' and e.fieldid = 1010004 
+		<if test="objid!=null and objid!=''">
+			and a.objid = ${objid}
+		</if>
+		<if test="begintime != null and begintime != ''">
+			and a.collecttime &gt;= #{begintime}::timestamp 
+		</if>
+		<if test="objname!=null and objname!=''">
+			and b.objname like '%${objname}%'
+		</if>
+		<if test="fieldvalue!=null and fieldvalue!='' ">
+			and f.fieldvalue = #{fieldvalue}
+		</if>
+		order by a.collecttime desc
+	</select>
+	
+	<!-- 站点管理 添加 -->
+	<insert id="addObj2Obj" parameterType="map">
+		insert into cp_connect_obj2obj(objtypeid1,objid1,objtypeid2,objid2)
+		values(${objtypeid1},${objid1},${objtypeid2},${objid2})
+	</insert>
+	<!-- 站点管理 查询 -->
+	<select id="queryObj2Obj" parameterType="map" resultType="map">
+		select a.objid1,b.objname as objname1,a.objid2,c.objname as objname2  from cp_connect_obj2obj a 
+		left join cp_info_obj b on a.objid1=b.objid
+		left join cp_info_obj c on a.objid2=c.objid
+		where 1=1
+		<if test="objname!=null and objname!=''">
+			and b.objname like '%${objname}%' 
+		</if>
+		<if test="objid1!=null and objid1!='' ">
+			and a.objid1 = ${objid1}
+		</if>
+		<if test="objid2!=null and objid2!='' ">
+			and a.objid2 = ${objid2}
+		</if>
+		order by objid1,objid2 
+	</select>
+	<!-- 站点管理 删除 -->
+	<delete id="delObj2Obj" parameterType="map">
+		delete from cp_connect_obj2obj where objid1 = ${objid1}
+		<if test="objid2!=null and objid2!='' ">
+			and objid2=${objid2}
+		</if>
+	</delete>
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+		
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	<!-- ===================================对象类型表管理和字段管理================================== -->
+	
+	<!-- 获取对象类型的信息表列表/查询功能 -->
+	<select id="getTableList" parameterType="map" resultType="wy.qingdao_atmosphere.datacenter.domain.Tableinfoadd">
+		select tableid,objtypeid,tableshowname,isused,tabletype from cp_config_tableinfoadd where true
+		<if test="objtypeid != null and objtypeid != 0">
+			and objtypeid = ${objtypeid}
+		</if>
+		<if test="tableshowname != null and tableshowname != ''">
+			and tableshowname = #{tableshowname}
+		</if>
+		<if test="isused != null and isused != 2">
+			and isused = ${isused}
+		</if>
+		<if test="tabletype != null and tabletype != ''">
+			and tabletype = #{tabletype}
+		</if>
+	</select>
+	
+	<!-- 对象类型表新增 -->
+	<insert id="tableinfoadd" parameterType="wy.qingdao_atmosphere.datacenter.domain.Tableinfoadd">
+		insert into cp_config_tableinfoadd values (
+		   (select case data.tableid when 0 then (#{objtypeid}||'01')::numeric else (data.tableid+1) end id from
+		     (
+		      select COALESCE(max(tableid),0) tableid from cp_config_tableinfoadd where objtypeid = ${objtypeid}
+		     )data
+		   ),${objtypeid},#{tableshowname},1,#{tabletype}
+		);
+	</insert>
+	
+	<!-- 对象类型表修改 -->
+	<update id="tableinfoupdate" parameterType="wy.qingdao_atmosphere.datacenter.domain.Tableinfoadd">
+		update cp_config_tableinfoadd set tableshowname = #{tableshowname} where tableid = ${tableid}
+	</update>
+	
+	<!-- 对象类型表批量删除/恢复 -->
+	<update id="tableBatchRemoveAndRecover" parameterType="map">
+		update cp_config_tableinfoadd set isused = ${state} where tableid in (${tableid});
+		update cp_config_tableinfo set isused = ${state} where tableid in (${tableid});
+	</update>
+	
+	<!-- 查看表的字段信息 -->
+	<select id="getFieldinfoList" parameterType="map" resultType="wy.qingdao_atmosphere.datacenter.domain.Tableinfo">
+		select fieldid,fieldname,fieldshowname,tableid,fielddatatype,isdictionaries,dicname,dicid,isused,isinstalled,orderintable from cp_config_tableinfo where true
+		<if test="tableid != null and tableid != ''">
+		and tableid = ${tableid}
+		</if>
+		<if test="isused != null and isused != ''">
+		and isused = ${isused}
+		</if>
+		<if test="fieldname != null and fieldname != '' and fieldshowname != null and fieldshowname != ''">
+		and (fieldname = #{fieldname} or fieldshowname = #{fieldshowname})
+		</if>
+		order by fieldid,orderintable
+	</select>
+	
+	<!-- 表字段信息新增 -->
+	<insert id="fieldinfoadd" parameterType="wy.qingdao_atmosphere.datacenter.domain.Tableinfo">
+		insert into cp_config_tableinfo values (
+		   (select case data.fieldid when 0 then (${tableid}||'0001')::numeric else (data.fieldid+1) end id from
+		     (
+		      select COALESCE(max(fieldid),0) fieldid from cp_config_tableinfo where tableid = ${tableid}
+		     )data
+		   ),#{fieldname},#{fieldshowname},${tableid},#{fielddatatype},'0','',null,1,0,
+		   (select COALESCE(max(orderintable),0)+1 orderintable from cp_config_tableinfo where tableid = ${tableid})
+		);
+	</insert>
+	
+	<!-- 表字段信息修改 -->
+	<update id="fieldinfoupdate" parameterType="wy.qingdao_atmosphere.datacenter.domain.Tableinfo">
+		update cp_config_tableinfo set fieldname = #{fieldname},fieldshowname = #{fieldshowname},fielddatatype = #{fielddatatype} where fieldid = ${fieldid}
+	</update>
+	
+	<!-- 表字段排序 -->
+	<update id="fieldorderby" parameterType="map">
+		<if test="fieldid != '' and orderintable != '' and order != ''">
+			update cp_config_tableinfo set orderintable = ${orderintable}${order}1 where fieldid = ${fieldid};
+			update cp_config_tableinfo set orderintable = ${orderintable} where fieldid = ${fieldid}${order}1;
+		</if>
+	</update>
+	
+	<!-- 表字段批量删除/恢复 -->
+	<update id="fieldBatchRemoveAndRecover" parameterType="map">
+		update cp_config_tableinfo set isused = ${state} where fieldid in (${fieldid});
+	</update>
+</mapper>

@@ -1,0 +1,21 @@
+package wy.qingdao_atmosphere.reportform.service;
+
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.springframework.stereotype.Service;
+
+import wy.qingdao_atmosphere.reportform.dao.ReportformDao;
+
+@Service("reportformService")
+public class ReportformServiceImpl implements ReportformService{
+	@Resource
+	private ReportformDao reportformDao;
+
+	public List<Map<String, Object>> getwz(String objtypeid) {
+		return reportformDao.getwz(objtypeid);
+	}
+
+}

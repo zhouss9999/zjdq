@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.mobile.mapping.AirAppmapper">
+
+
+	<!-- 获取城市空气质量监测数据 : 国站+微站 -->
+	<select id="getKQForCity" parameterType="map" resultType="wy.qingdao_atmosphere.mobile.domain.AirCollect">
+		
+		<!-- 获取城市收藏夹列表 -->
+		<if test="userid != null and userid != ''">
+			select cities.city,collecttime,
+			aqi,pm25,pm10,co,no2,so2,o3,o38,voc
+			from
+			(select fieldvalue as city from cp_attach_infostore where fieldid = 3010003 
+				and objid in(
+					select objid from cp_attach_infostore  where (fieldid=3010002 and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{userid}),'%'))
+				)
+			) cities
+			left join
+			(
+		</if>
+	
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据 -->
+		<if test="recently != null and recently != ''">
+			with x as (
+		</if>
+		
+		<!-- 引入SQL片段 -->
+		<include refid="selectAppCityDatas" />
+		
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据
+			recently写法：必须有单引号,类型：String ,值：'整数 year'/month/day/hour/minute/second -->
+		<if test="recently != null and recently != ''">
+			)select x.* from (select city,max(collecttime) collecttime from x group by city) y inner join x
+			on y.city = x.city and x.collecttime::timestamp &gt;= (y.collecttime::timestamp - interval '${recently}') 
+			order by city,x.collecttime desc
+		</if>
+		
+		<!-- 获取城市收藏夹列表 -->
+		<if test="userid != null and userid != ''">
+			) datas on cities.city = datas.city
+			order by cities.city,collecttime nulls last
+		</if>
+		
+	</select>
+	
+
+	<!-- 获取站点空气质量监测数据 : 国站+微站  -->
+	<select id="getKQForSite" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.KqzlColl">
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据 -->
+		<if test="recently != null and recently != ''">
+			with x as (
+		</if>
+		
+       	<!-- 引入SQL片段 -->
+       	<include refid="selectAppSiteDatas" />
+       	
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据
+			recently写法：必须有单引号,类型：String ,值：'整数 year'/month/day/hour/minute/second -->
+		<if test="recently != null and recently != ''">
+			)select x.* from (select objid,max(collecttime) collecttime from x group by objid) y inner join x
+			on y.objid = x.objid and x.collecttime::timestamp &gt;= (y.collecttime::timestamp - interval '${recently}') 
+			order by x.objid,x.collecttime desc
+		</if>
+	</select>
+
+
+	<!-- 获取站点空气质量排名 : 国站+微站  -->
+	<select id="getRankForSite" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.KqzlColl">
+		<!-- AQI排名 -->
+		<if test="sortaqi != null and sortaqi != ''">
+			with x as (
+		</if>
+       	<!-- 引入SQL片段 -->
+       	<include refid="selectAppSiteDatas" />
+		<!-- AQI排名 -->
+		<if test="sortaqi != null and sortaqi != ''">
+			)select DENSE_RANK() OVER (order by aqi ${sortaqi} nulls last) as rank,* from x
+			order by rank,objid
+		</if>
+	</select>
+	
+	
+	<!-- 手机端获取对象基本信息列表 -->
+	<select id="AirAppPublic" parameterType="map" resultType="wy.util.datapersistence.ModelAssist">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from 
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		and b.tableid = c.tableid and c.objtypeid = #{objtypeid} 
+		<!-- 通过城市获取站点 -->
+		<if test="city != null and city != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid in(1010006,5010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+			) 
+		</if> 
+		<!-- 通过账号获取收藏城市/站点 
+		<if test="userid != null and userid != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid=${userfid} and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{userid}),'%'))
+			) 
+		</if> -->
+		order by objid desc,fieldid
+	</select>
+	
+	
+	<!-- 查询实时数据站点对应日数据站点objid -->
+	<select id="getDayDataObjid" parameterType="String" resultType="String">
+		select objid from cp_attach_infostore where fieldid in (2010002,6010002) and
+		fieldvalue in (select fieldvalue from cp_attach_infostore where fieldid in (1010001,5010001) and objid = ${_parameter})
+	</select>
+	
+	
+	<!-- SQL片段,查询国站微站空气质量基本监测参数,SQL重用
+			参数：dateformat,objtypeid,city,objid,sitenumberid
+			begintime,endtime
+	 -->
+	<sql id="selectAppSiteDatas">
+		<!-- dateformat格式说明：'yyyy-mm-dd HH24:MI:SS'或 'yyyy-mm-dd'或'yyyy-mm',必传 -->
+       	select sto.*,to_char(act.collecttime,#{dateformat}) collecttime,
+       	act.aqi,act.pm25,act.pm10,act.co,act.no2,act.so2,act.o3,act.o38,act.voc,act.pollutant,
+       	case act.quality when '1' then '优' when '2' then '良' when '3' then '轻度污染'
+	    when '4' then '中度污染' when '5' then '重度污染' when '6' then '严重污染' else act.quality end as quality
+		from
+			(select objid,
+				max(case when fieldid in(1010001,5010001) then fieldvalue else '-' end) as sitenumber,
+				max(case when fieldid in(1010002,5010002) then fieldvalue else '-' end) as sitetype,
+				max(case when fieldid in(1010003,5010003) then fieldvalue else '-' end) as sitename,
+				max(case when fieldid in(1010004,5010004) then fieldvalue else '-' end) as monitortype,
+				max(case when fieldid in(1010005,5010005) then fieldvalue else '-' end) as province,
+				max(case when fieldid in(1010006,5010006) then fieldvalue else '-' end) as city,
+				max(case when fieldid in(1010007,5010007) then fieldvalue else '-' end) as county,
+				max(case when fieldid in(1010008,5010008) then fieldvalue else '-' end) as address,
+				max(case when fieldid in(1010009,5010009) then fieldvalue else '-' end) as lon,
+				max(case when fieldid in(1010010,5010010) then fieldvalue else '-' end) as lat,
+				max(case when fieldid in(1010011,5010011) then fieldvalue else '-' end) as device,
+				max(case fieldid when 1010001 then '微站' when 5010001 then '国站' end) as issite 
+			from (
+				select b.fieldname,a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue from 
+				cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+				where a.fieldid = b.fieldid
+				and b.tableid = c.tableid
+				<!-- objtypeid:微站-1,国站-5 -->
+				and c.objtypeid in (${objtypeid})
+				<!-- 所属城市 -->
+				<if test="city != null and city != ''">
+					and 
+					a.objid in(
+						select objid from cp_attach_infostore where (fieldid in (1010006,5010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+					) 
+				</if>
+
+				<if test="objid != null and objid != ''">
+					and a.objid in (${objid})
+				</if>
+				
+				order by objid desc,fieldid
+			) attach
+			group by objid order by objid) sto
+		left join
+			(select objid,collecttime,
+				<!-- 动态传入sitenumber的fieldid,必传
+				sitenumberid:	实时数据:	1010001(微),5010001(国);	日数据: 2010002(微),6010002(国) -->
+			    max(case when fieldid in(${sitenumberid}) then fieldvalue else '-' end) as sitenumber,			
+			    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+			    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+			    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+			    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+			    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+			    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+			    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3,
+			    max( case when paramid in(97) then datavalue else '0.0' end ) as o38,
+			    max( case when paramid in(28) then datavalue else '0.0' end ) as voc,
+			    max( case when paramid in(8) then datavalue else '-' end ) as pollutant,
+			    max( case when paramid in(9) then datavalue else '-' end ) as quality
+			from (
+				select obj.objid,conn.paramid,datas.datavalue,
+				info.fieldid,info.fieldvalue,datas.collecttime
+				from cp_collect_actual datas,cp_connect_objparam conn,cp_info_param param,
+				cp_info_device dev,cp_attach_infostore info,cp_info_obj obj
+				where datas.dataguid = conn.dataguid
+				and conn.paramid = param.paramid
+				and conn.devicenumber = dev.devicenumber
+				and conn.objid = obj.objid
+				and info.objid = obj.objid
+				and dev.devicetypeid in (1,4)
+				and conn.paramid in (1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9)
+				
+				<!--  sitenumberid:
+				实时数据: 1010001(微),5010001(国);
+				日  数  据: 2010002(微),6010002(国) -->
+				and info.fieldid in (${sitenumberid})
+				<if test="begintime != null and begintime != ''">
+					and datas.collecttime &gt;= '${begintime}'
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and datas.collecttime &lt;= '${endtime}'
+				</if>
+			) coll
+			group by objid,collecttime) act
+			on sto.sitenumber = act.sitenumber
+		order by objid,collecttime desc
+	</sql>
+	
+	
+	<!-- SQL片段,查询城市空气质量基本监测参数,SQL重用
+			参数：dateformat,city,begintime,endtime
+	 -->
+	<sql id="selectAppCityDatas">
+		<!-- dateformat格式说明：'yyyy-mm-dd HH24:MI:SS'或 'yyyy-mm-dd'或'yyyy-mm',必传 -->
+		select sto.city,to_char(act.collecttime,#{dateformat}) collecttime,
+	        round(avg(act.aqi::numeric),1) as aqi,
+	        round(avg(act.pm25::numeric),1) as pm25,
+	        round(avg(act.pm10::numeric),1) as pm10,
+	        round(avg(act.co::numeric),1) as co,
+	        round(avg(act.no2::numeric),1) as no2,
+	        round(avg(act.so2::numeric),1) as so2,
+	        round(avg(act.o3::numeric),1) as o3,
+	        round(avg(act.o38::numeric),1) as o38,
+	        round(avg(act.voc::numeric),1) as voc
+		from
+			(select objid,
+			     max(case when fieldid in(1010003,5010003) then fieldvalue else '-' end) as sitename,
+			     max(case when fieldid in(1010001,5010001) then fieldvalue else '-' end) as sitenumber,
+			     max(case when fieldid in(1010006,5010006) then fieldvalue else '-' end) as city
+			from (
+				select b.fieldname,a.infoid,a.objid,a.fieldid,ltrim(rtrim(a.fieldvalue)) as fieldvalue from 
+				cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+				where a.fieldid = b.fieldid
+				and b.tableid = c.tableid and c.objtypeid in (1,5)
+				<if test="city != null and city != ''">
+					and 
+					a.objid in(
+						select objid from cp_attach_infostore where (fieldid in (1010006,5010006) and ltrim(rtrim(fieldvalue))  like concat(concat('%',#{city}),'%'))
+					) 
+				</if>
+				order by objid desc,fieldid
+			) attach
+			group by objid) sto
+		inner join
+			(select objid,collecttime,
+			    max(case when fieldid in(1010001,5010001) then fieldvalue else '-' end) as sitenumber,			
+			    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+			    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+			    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+			    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+			    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+			    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+			    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3,
+			    max( case when paramid in(97) then datavalue else '0.0' end ) as o38,
+			    max( case when paramid in(28) then datavalue else '0.0' end ) as voc
+			from (
+				select obj.objid,conn.paramid,datas.datavalue,
+				info.fieldid,info.fieldvalue,datas.collecttime
+				from cp_collect_actual datas,cp_connect_objparam conn,cp_info_param param,
+				cp_info_device dev,cp_attach_infostore info,cp_info_obj obj
+				where datas.dataguid = conn.dataguid
+				and conn.paramid = param.paramid
+				and conn.devicenumber = dev.devicenumber
+				and conn.objid = obj.objid
+				and info.objid = obj.objid
+				and dev.devicetypeid in (1,4)
+				and conn.paramid in (1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9)
+				and info.fieldid in (1010001,5010001)
+				<if test="begintime != null and begintime != ''">
+					and datas.collecttime &gt;= '${begintime}'
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and datas.collecttime &lt;= '${endtime}'
+				</if>
+			) coll
+			group by objid,collecttime) act
+			on sto.sitenumber = act.sitenumber
+		group by city,collecttime
+		order by collecttime desc
+	</sql>
+	
+</mapper>

@@ -1,0 +1,115 @@
+package wy.qingdao_atmosphere.reportform.timer;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.scheduling.annotation.Scheduled;
+
+import net.sf.json.JSONArray;
+
+public class TkqxTimer {
+	
+//	@Scheduled(cron = "0 0 9,21 * * ?")
+	@Scheduled(cron = "0 0 * * * ?")
+	public void getTkqxTimer(){
+//		SimpleDateFormat format = new SimpleDateFormat("yyyy:MM:dd HH:00:00");
+		Calendar cal = Calendar.getInstance();
+		int year = cal.get(Calendar.YEAR);
+	    int month = cal.get(Calendar.MONTH) + 1;
+	    int day = cal.get(Calendar.DATE);
+	    int hours = cal.get(Calendar.HOUR_OF_DAY);
+	    hours -= 15;
+	    String start = hours<12?"00":"12";
+//	    String end = hours
+		String form = "FROM="+day+start+"&TO="+day+"00";
+		String url = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR="+year+"&MONTH="+month+"&"+form+"&STNM=54857";
+		
+	}
+	
+	public String getTkqxJson(String url){
+		String a = null;
+		try {
+//			String url = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR=2018&MONTH=08&FROM=1000&TO=1000&STNM=54857";
+			BufferedReader in = new BufferedReader(new InputStreamReader(
+					new URL(url).openConnection().getInputStream(), "GB2312"));//GB2312可以根据需要替换成要读取网页的编码
+			boolean ishas = false;//需要处理的内容
+			boolean isStation = false;
+			int topNumber = 0;
+			List<Map<String, Object>> topName = new ArrayList<Map<String,Object>>();
+			List<Map<String, Object>> resultList = new ArrayList<Map<String,Object>>();
+			while ((a = in.readLine()) != null) {
+				if(a.contains("Station identifier")){
+					isStation = true;
+				}
+				if(a.contains("</PRE>")){
+					ishas = false;
+				}
+				if(ishas){
+					if(isStation){
+						//处理下半段
+						
+					}else{
+						//处理上半段
+						System.out.println(a);
+						char [] chara = a.toCharArray();
+						//获取表头信息
+						if(topNumber==1){
+							int start = 0;
+							int end = 0;
+							for(int i =0;i<chara.length;i++){
+								if(chara[i]==' '&&chara[i+1]!=' '){
+									start = i+1;
+								}
+								if(i==chara.length-1||(chara[i+1]==' '&&chara[i]!=' ')){
+									end = i;
+									String name = "";
+									for (int j = start; j <= end; j++) {
+										name += chara[j];
+									}
+									Map<String, Object> map = new HashMap<String, Object>();
+									map.put("name", name);
+									map.put("index", end);
+									topName.add(map);
+								}
+								
+							}
+						}
+						
+						if(topNumber>3){
+							Map<String, Object> map = new HashMap<String, Object>();
+							int startVal = 0;
+							for(int i = 0 ; i<topName.size();i++){
+								int index = (Integer) topName.get(i).get("index");
+								map.put(topName.get(i).get("name").toString(), a.substring(startVal,index+1).trim());
+								startVal = index+1;
+							}
+							resultList.add(map);
+						}
+						
+						topNumber++;
+					}
+//					String text = a.trim().replaceAll("\\s+",",");
+
+				}
+				if(a.contains("<PRE>")){
+					ishas = true;
+				}
+			}
+			JSONArray json = JSONArray.fromObject(resultList); 
+//			System.out.println(json.toString());
+			return json.toString();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
+		} 
+	
+	
+	}
+}

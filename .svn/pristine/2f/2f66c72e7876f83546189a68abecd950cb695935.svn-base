@@ -1,0 +1,25 @@
+package wy.qingdao_atmosphere.onemap.service;
+
+import java.io.StringWriter;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+
+
+
+public interface OneMapService {
+	//一张图-获取目录列表
+	public List<OmMenu> getOmMenuList();
+	
+	//一张图-获取站点基本信息列表及坐标信息(mark:标记,国家监测站:gz, 微站:wz)
+	public StringWriter getOmSiteGeom(HttpServletRequest request, String mark);
+	//获取国站空气质量数据
+	public List<KqzlColl> getOmGzSiteForKqzl(HttpServletRequest request, Map<String, Object> paramMap);
+	//一张图-微波辐射监测数据
+	public Map<String, Object> omFsData(HttpServletRequest request, String datastreamIds);
+
+}

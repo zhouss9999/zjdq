@@ -1,0 +1,25 @@
+package wy.qingdao_atmosphere.reportform.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.support.SqlSessionDaoSupport;
+import org.springframework.stereotype.Repository;
+
+@Repository("reportformDao")
+public class ReportformDaoImpl extends SqlSessionDaoSupport implements ReportformDao{
+
+	//创建session工厂
+	@Resource
+	public void setSuperSessionFactory(SqlSessionFactory sessionFactory) {
+		this.setSqlSessionFactory(sessionFactory);
+	}
+		
+	public List<Map<String, Object>> getwz() {
+		return this.getSqlSession().selectList("getwz");
+	}
+
+}

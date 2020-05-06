@@ -1,0 +1,9 @@
+package wy.qingdao_atmosphere.reportform.dao;
+
+import java.util.List;
+import java.util.Map;
+
+public interface ReportformDao {
+	//查询大气站点的设备
+	public List<Map<String, Object>> getwz();
+}

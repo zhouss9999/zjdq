@@ -1,0 +1,247 @@
+package wy.util;
+
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPFile;
+import org.apache.commons.net.ftp.FTPReply;
+ 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.SocketException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+public class FtpUtil {
+
+	 /**
+     * 连接FTP服务
+     * @param ip : IP地址
+     * @param port : 端口号
+     * @param username : 用户名
+     * @param password : 密码
+     * @return FTPClient
+     */
+    public static FTPClient ftpConnection(String ip, int port, String username, String password) {
+    	FTPClient ftpClient = new FTPClient(); 
+    	ftpClient.setControlEncoding("UTF8");
+    	try {  
+            ftpClient.connect(ip, port);
+            ftpClient.login(username, password); 
+    		ftpClient.enterLocalPassiveMode();//设置为被动模式
+            int replyCode = ftpClient.getReplyCode(); //是否成功登录服务器
+            if(!FTPReply.isPositiveCompletion(replyCode)) {
+            	ftpClient.disconnect();
+            	System.out.println("--ftp连接失败--");
+                System.exit(1);
+            }
+            ftpClient.enterLocalPassiveMode();//这句最好加告诉服务器开一个端口
+        } catch (SocketException e) {  
+            e.printStackTrace();  
+        } catch (IOException e) {  
+            e.printStackTrace();  
+        }   
+        
+        return ftpClient;  
+    }
+    
+ 
+    /**
+     * 关闭FTP服务
+     */
+    public static void ftpClose(FTPClient ftpClient) {
+        if (ftpClient.isConnected()) {
+            try {
+                ftpClient.logout();
+                ftpClient.disconnect();
+                System.out.println("FTP已断开!");
+            } catch (Exception e) {
+            	System.out.println("FTP断开异常。。。");
+                e.printStackTrace();
+            }
+        }
+    }
+ 
+    
+    /**
+     * 取ftp上的微波辐射文件列表
+     * @param FTPClient
+     * @param hour 取几小时的数据
+     * @return fileMap
+     */
+    public static Map<String, List<String>> getFileList(FTPClient ftpClient, int hour, String dbMaxTime) {
+    	
+    	//获取两小时之内的数据
+    	SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
+		Date date = new Date();
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
+		calendar.set(Calendar.HOUR_OF_DAY, calendar.get(Calendar.HOUR_OF_DAY)-hour);//取几小时的数据
+		String time = sdf.format(calendar.getTime());
+    	
+		//创建map，用于返回
+        Map<String, List<String>> fileMap = new LinkedHashMap<String, List<String>>();
+        
+        // 获得指定目录下所有文件名
+        FTPFile[] ftpFiles = null;
+        try {
+        	ftpFiles = ftpClient.listFiles("/");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
+        List<String> jcList = new ArrayList<String>();//基础数据
+		List<String> fyList = new ArrayList<String>();//反演数据
+		List<String> wdList = new ArrayList<String>();//稳定系统数据
+		List<String> ztList = new ArrayList<String>();//状态数据
+		List<String> kxList = new ArrayList<String>();//廓线数据
+        
+        for (int i = 0; ftpFiles != null && i < ftpFiles.length; i++) {
+            FTPFile file = ftpFiles[i];
+            if (file.isFile()) {
+            	if (file.getName().split("_")[1].compareTo(time) >= 0) {
+            		if (file.getName().contains("_JC")) {
+            			jcList.add(file.getName());
+            		} else if (file.getName().contains("_FY")) {
+            			fyList.add(file.getName());
+            		} else if (file.getName().contains("_WDD")) {
+            			wdList.add(file.getName());
+            		} else if (file.getName().contains("_ZT")) {
+            			ztList.add(file.getName());
+            		} else if (file.getName().contains("_KX")) {
+            			kxList.add(file.getName());
+            		}
+    			}
+            }
+        }
+        
+        fileMap.put("jcList", readFile(ftpClient,getFileListByTime(jcList,dbMaxTime)));
+        fileMap.put("fyList", readFile(ftpClient,getFileListByTime(fyList,dbMaxTime)));
+        fileMap.put("wdList", readFile(ftpClient,getFileListByTime(wdList,dbMaxTime)));
+        fileMap.put("ztList", readFile(ftpClient,getFileListByTime(ztList,dbMaxTime)));
+        fileMap.put("kxList", readFile(ftpClient,getFileListByTime(kxList,dbMaxTime)));
+        
+        return fileMap;
+    }
+    
+    
+    /**
+     * 获取大于数据库时间的数据
+     * @param goupList 分组后的文件名列表
+     * @param dbMaxTime 数据库最大时间
+     * @return fileLists
+     */
+    public static List<String> getFileListByTime(List<String> goupList, String dbMaxTime) {
+    	List<String> groupFileList = new ArrayList<String>();
+    	for (String filename : goupList) {
+    		if ((dbMaxTime != null) && (!"".equals(dbMaxTime))) {
+    			if (filename.split("_")[1].compareTo(dbMaxTime) > 0) {
+    				groupFileList.add(filename);
+    			}
+			} else {
+				groupFileList.add(filename);
+			}
+			
+		}
+    	
+    	return groupFileList;
+    }
+
+ 
+	/**
+	 * 取ftp上的文件内容
+	 * @param FTPClient
+	 * @param fileLists
+	 * @return list
+	 */
+   public static List<String> readFile(FTPClient ftpClient, List<String> filelist){
+	   
+	   List<String> list = new ArrayList<String>();
+	   
+	   if (filelist.size() > 0) {
+		   for (String filename : filelist) {
+			   InputStream ins = null;
+			   StringBuilder builder = null;
+			   try {
+				   
+				   // 从服务器上读取指定的文件
+				   ins = ftpClient.retrieveFileStream(filename);
+				   BufferedReader reader = new BufferedReader(new InputStreamReader(ins, "UTF-8"));
+				   String line;
+				   builder = new StringBuilder(150);
+				   while ((line = reader.readLine()) != null) {
+					   builder.append(line.replaceAll("\\p{C}", ""));//去除不可见字符
+					   builder.append(";");//多组数据用分号隔开
+					   //builder.append("\r\n");
+				   }
+				   reader.close();
+				   if (ins != null) {
+					   ins.close();
+				   }
+				   // 主动调用一次getReply()把接下来的226消费掉. 这样做是可以解决这个返回null问题
+				   ftpClient.getReply();
+			   } catch (Exception e) {
+				   System.out.println("文件读取失败");
+				   e.printStackTrace();
+			   }
+			   
+			   String text = builder.toString().replace(";;NNNN", "").replace(";;", ";");
+			   String content = text.substring(0, text.length()-1);
+			   if (content.contains(";")) {
+				   String[] conArr = content.split(";");
+				   for (int i = 0; i < conArr.length; i++) {
+					   list.add(filename.split("_")[0]+","+conArr[i]);
+				   }
+			   } else {
+				   list.add(filename.split("_")[0]+","+content);
+			   }
+		   }
+	   }
+	   return list;
+    }
+    
+   
+   /**
+	 * 取ftp上的文件内容(暂不用)
+	 * @param FTPClient
+	 * @param filename
+	 * @return String
+	 */
+   public static String readFile(FTPClient ftpClient, String filename){
+	   
+	   InputStream ins = null;
+	   StringBuilder builder = null;
+	   try {
+		   
+		   // 从服务器上读取指定的文件
+		   ins = ftpClient.retrieveFileStream(filename);
+		   BufferedReader reader = new BufferedReader(new InputStreamReader(ins, "UTF-8"));
+		   String line;
+		   builder = new StringBuilder(150);
+		   while ((line = reader.readLine()) != null) {
+			   builder.append(line.replaceAll("\\p{C}", ""));//去除不可见字符
+			   builder.append(";");//多组数据用分号隔开
+			   //builder.append("\r\n");
+		   }
+		   reader.close();
+		   if (ins != null) {
+			   ins.close();
+		   }
+		   // 主动调用一次getReply()把接下来的226消费掉. 这样做是可以解决这个返回null问题
+		   ftpClient.getReply();
+	   } catch (Exception e) {
+		   System.out.println("文件读取失败");
+		   e.printStackTrace();
+	   }
+	   //去除多余的字符
+	   String text = builder.toString().replace(";;NNNN", "").replace(";;", ";");
+	   String content = text.substring(0, text.length()-1);
+	   return content;
+   }
+
+}

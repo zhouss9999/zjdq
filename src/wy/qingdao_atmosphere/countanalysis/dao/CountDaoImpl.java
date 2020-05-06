@@ -1,0 +1,75 @@
+package wy.qingdao_atmosphere.countanalysis.dao;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.support.SqlSessionDaoSupport;
+import org.springframework.stereotype.Repository;
+
+import wy.qingdao_atmosphere.countanalysis.domain.AreaAlarmCount;
+import wy.qingdao_atmosphere.countanalysis.domain.AreaSiteCount;
+import wy.qingdao_atmosphere.countanalysis.domain.Fitting;
+import wy.qingdao_atmosphere.onemap.domain.OmRank;
+
+@Repository("countDao")
+public class CountDaoImpl extends SqlSessionDaoSupport implements CountDao {
+	@Resource
+	public void setSuperSessionFactory(SqlSessionFactory sessionFactory) {
+		this.setSqlSessionFactory(sessionFactory);
+	}
+
+	public List<String> getAreaName(String city) {
+		return this.getSqlSession().selectList("getAreaName", city);
+	}
+
+	public List<AreaSiteCount> getAreaSiteCount(String city) {
+		return this.getSqlSession().selectList("getAreaSiteCount", city);
+	}
+
+	public String overDays(String year, String area) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("area", area);
+		if (year == null || "".equals(year)) {
+			year = new SimpleDateFormat("yyyy").format(new Date());
+			map.put("begintime", year +"-01-01 00:00:00");
+			map.put("endtime", year +"-12-31 23:59:59");
+		} else {
+			map.put("begintime", year +"-01-01 00:00:00");
+			map.put("endtime", year +"-12-31 23:59:59");
+		}
+		
+		String overdays = this.getSqlSession().selectOne("overdays", map);
+		if (overdays == null) {
+			overdays = "0";
+		}
+		
+		return overdays;
+	}
+
+	public String getAlarmMaxtime(){
+		return this.getSqlSession().selectOne("getAlarmMaxtime");
+	}
+	
+	public List<AreaAlarmCount> areaAlarmCount(Map<String, Object> map) {
+		return this.getSqlSession().selectList("areaAlarmCount", map);
+	}
+	
+	public List<OmRank> getSitesHistory(Map<String, Object> map){
+		return this.getSqlSession().selectList("getSitesHistory", map);
+	}
+
+	public List<Fitting> getLineFit(String objid, String datetime) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objid", objid);
+		map.put("begintime", datetime +" 00:00:00");
+		map.put("endtime", datetime +" 23:59:59");
+		
+		return this.getSqlSession().selectList("getLineFit", map);
+	}
+}

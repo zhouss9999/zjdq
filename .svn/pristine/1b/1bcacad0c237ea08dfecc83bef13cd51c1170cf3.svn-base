@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.reportfrom.mapping.Reportfrommapper">
+	<!-- 查询需要同步数据的微站 -->
+	<select id="getwz" parameterType="map" resultType="map">
+		select DISTINCT a.objid,a.objtypeid,a.objname,COALESCE(b.devicenumber,'') as devicenumber ,COALESCE(c.devicename,'') as devicename,COALESCE(c.rmk1,'') as rmk1
+		from cp_info_obj a 
+		left join cp_connect_objparam b on a.objid = b.objid and b.isused=1 
+		left join cp_info_device c on b.devicenumber = c.devicenumber
+		where b.devicenumber is not null
+		<if test="objtypeid!=null and objtypeid!=''">
+			and a.objtypeid in (${objtypeid})
+		</if>
+		<if test="objid!=null and objid!='' ">
+			and a.objid = ${objid}
+		</if>
+		order by objtypeid desc,objid
+	</select>
+	<!-- 获取小时数据 -->
+	<select id="queryrealData" parameterType="map" resultType="map">
+		select objid,objname,collecttime,devicenumber,
+   <!-- max( case paramname when 'AQI' then datavalue else '0.0' end ) as aqi,
+    max( case paramname when 'so2' then datavalue else '0.0' end ) as so2,
+    max( case paramname when 'no2' then datavalue else '0.0' end ) as no2,
+    max( case paramname when 'pm10' then datavalue else '0.0' end ) as pm10,
+    max( case paramname when 'pm25' then datavalue else '0.0' end ) as pm25,
+    max( case paramname when 'pm10_24h' then datavalue else '0.0' end ) as pm10_24h,
+    max( case paramname when 'pm25_24h' then datavalue else '0.0' end ) as pm25_24h,
+    max( case paramname when 'co' then datavalue else '0.0' end ) as co,
+    max( case paramname when 'o3' then datavalue else '0.0' end ) as o3,
+    max( case paramname when 'O38' then datavalue else '0.0' end ) as o38,
+    max( case paramname when 'quality' then datavalue else '-' end ) as quality,
+    max( case paramname when 'primary_pollutant' then datavalue else '-' end ) as primary_pollutant  -->
+    
+    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3,
+    max( case when paramid in(97) then datavalue else '0.0' end ) as o38,
+	max( case when paramid in(95) then datavalue else '0.0' end ) as pm10_24h,
+    max( case when paramid in(96) then datavalue else '0.0' end ) as pm25_24h,
+    max( case when paramid in(8) then datavalue else '-' end ) as primary_pollutant,
+    max( case when paramid in(9) then datavalue else '-' end ) as quality
+			from (
+				select DISTINCT b.objid,d.objname,b.paramid,c.paramname,a.datavalue,a.collecttime,b.devicenumber
+				from cp_collect_actual  a 
+				left join cp_connect_objparam b on a.dataguid = b.dataguid
+				left join cp_info_param  c on b.paramid = c.paramid
+				left join cp_info_obj d on b.objid = d.objid
+				where d.objtypeid in (${objtypeid})
+				 and c.paramid in (1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9,95,96) 
+				<if test="objid!=null and objid!=''">
+					and b.objid in (${objid})
+				</if>
+				<if test="begintime != null and begintime != ''">
+					and a.collecttime &gt;= '${begintime}'
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and a.collecttime &lt;= '${endtime}'
+				</if>
+				order by a.collecttime desc
+				) coll
+			group by objid,collecttime,devicenumber,objname
+			order by collecttime desc
+	</select>
+	
+	<!-- 探空曲线 查询对象站点，设备编号，站点编号 -->
+	<select id="querytkqxobj" resultType="map">
+		select distinct a.objid,a.objname,c.devicenumber,b.fieldvalue as stationnumber
+		from cp_info_obj a left join cp_attach_infostore b on a.objid = b.objid
+		left join cp_connect_objparam c on a.objid = c.objid
+		where objtypeid = 11 and fieldid = 11010002
+		and c.isused = 1
+	</select>
+	
+	<!-- 探空曲线  数据查询 -->
+	<select id="queryTkqx" resultType="map">
+		select DISTINCT b.objid,d.objname,b.paramid,c.paramname,a.datavalue,a.collecttime,b.devicenumber,a.dataid
+		from cp_collect_actual  a 
+		left join cp_connect_objparam b on a.dataguid = b.dataguid
+		left join cp_info_param  c on b.paramid = c.paramid
+		left join cp_info_obj d on b.objid = d.objid
+		where d.objtypeid = 11
+		and paramname = 'tkqx'
+		<if test="objid != null and objid != ''">
+			and b.objid = ${objid}
+		</if>
+		<if test="begintime != null and begintime != ''">
+			and a.collecttime &gt;= #{begintime}::timestamp 
+		</if>
+		<if test="endtime != null and endtime != ''">
+			and a.collecttime &lt;= #{endtime}::timestamp 
+		</if>
+		<if test="collecttime != null and collecttime != ''">
+			and a.collecttime = #{collecttime}::timestamp 
+		</if>
+		order by a.collecttime desc
+	</select>
+	<!-- 探空曲线  修改 -->
+	<update id="updateTkqx" parameterType="map">
+		update cp_collect_actual set datavalue = #{datavalue} where dataid = ${dataid}
+	</update>
+	
+	<!-- AQI日历 -->
+	<select id="queryAqiCalendar" parameterType="map" resultType="map">
+		select  c.paramname,round(avg(to_number(a.datavalue,'999999999')),1) as value,a.collecttime
+				from cp_collect_actual  a 
+				left join cp_connect_objparam b on a.dataguid = b.dataguid
+				left join cp_info_param  c on b.paramid = c.paramid
+				left join cp_info_obj d on b.objid = d.objid
+				where d.objtypeid = 6
+				and c.paramname = 'AQI' 
+				and a.collecttime &gt;= #{begintime}::timestamp 
+				and a.collecttime &lt;= #{endtime}::timestamp 
+				group by c.paramname,a.collecttime
+				order by a.collecttime
+	</select>
+	
+	<!-- 计算指定时间内的优良率 如：当月，当年 -->
+	<select id="queryGoodrate" parameterType="map" resultType="String">
+		select round((count(case when a.datavalue in ('优','良') then a.datavalue end)::numeric/count(b.objid))*100,1) as goodrate
+				from cp_collect_actual  a 
+				left join cp_connect_objparam b on a.dataguid = b.dataguid
+				left join cp_info_param  c on b.paramid = c.paramid
+				left join cp_info_obj d on b.objid = d.objid
+				where d.objtypeid = 6
+				and c.paramname = 'quality' 
+				and a.collecttime &gt;= #{begintime}::timestamp 
+				and a.collecttime &lt;= #{endtime}::timestamp 
+				group by c.paramname
+	</select>
+	
+	<!-- 当前时间 实时监测数据 -->
+	<select id="queryRealTimeData" parameterType="map" resultType="map">
+	select obj.objid,obj.objname,COALESCE(sj.aqi,'-') as aqi,COALESCE(sj.pm25,'-') as pm25,COALESCE(sj.pm10,'-') as pm10,COALESCE(sj.co,'-') as co,COALESCE(sj.no2,'-') as no2,COALESCE(sj.so2,'-') as so2,COALESCE(sj.o3,'-') as o3 
+	from cp_info_obj obj left join (
+	select objid,objname,
+    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3
+			from (
+				select DISTINCT b.objid,d.objname,b.paramid,c.paramname,a.datavalue,a.collecttime,b.devicenumber
+				from cp_collect_actual  a 
+				left join cp_connect_objparam b on a.dataguid = b.dataguid
+				left join cp_info_param  c on b.paramid = c.paramid
+				left join cp_info_obj d on b.objid = d.objid
+				where d.objtypeid in (1,5)
+				<if test="objid!=null and objid!='' ">
+					and d.objid = ${objid} 
+				</if>
+				<if test="begintime != null and begintime != ''">
+					and a.collecttime &gt;= #{begintime}::timestamp 
+					and a.collecttime &lt;= #{begintime}::timestamp 
+				</if>
+				order by a.collecttime desc
+				) coll
+			group by objid,collecttime,devicenumber,objname
+			order by collecttime desc ) sj
+		on obj.objid = sj.objid
+		where obj.objtypeid in (1,5)
+		<if test="objid!=null and objid!='' ">
+			and obj.objid = ${objid} 
+		</if>
+		order by obj.objid
+	</select>
+	
+	<!-- 空气质量优良率  时，日 ，月-->
+	<select id="queryGoodratetwo" parameterType="map" resultType="map">
+		select count(objid) sum,sum(one) one,sum(two) two,sum(three) three,sum(four) four,sum(five) five,sum(six) six
+	from (
+	select objid,objname,collecttime,
+	count(case datavalue when '1' then datavalue end) as one,
+	count(case datavalue when '2'  then datavalue end) as two,
+	count(case datavalue when '3'  then datavalue end) as three,
+	count(case datavalue when '4'  then datavalue end) as four,
+	count(case datavalue when '5'  then datavalue end) as five,
+	count(case datavalue when '6'  then datavalue end) as six
+		from(
+			select d.objid,d.objname,c.dataunit,a.datavalue,to_char(a.collecttime,'yyyy-mm') collecttime
+			from cp_collect_actual  a 
+			left join cp_connect_objparam b on a.dataguid = b.dataguid
+			left join cp_info_param  c on b.paramid = c.paramid
+			left join cp_info_obj d on b.objid = d.objid
+			where d.objtypeid = ${objtypeid}
+			and c.paramname = 'quality' 
+			<if test="begintime != null and begintime != ''">
+				and a.collecttime &gt;= #{begintime}::timestamp 
+			</if>
+			<if test="endtime != null and endtime != ''">
+				and a.collecttime &lt;= #{endtime}::timestamp 
+			</if>
+		) jc
+		group by objid,objname,collecttime
+	) sj
+	</select>
+	
+	<!-- 气象分析 -->
+	<select id="queryqxfx" resultType="map">
+		select objid,objname,to_char(collecttime,'yyyy-MM-dd HH24:mm:ss') collecttime,
+    max( case paramname when '温度' then datavalue else '0.0' end ) as 温度,
+    max( case paramname when '相对湿度' then datavalue else '0.0' end ) as 相对湿度,
+    max( case paramname when '风力' then datavalue else '0.0' end ) as 风力,
+    max( case paramname when '风向' then datavalue else '' end ) as 风向,
+    max( case paramname when '降水量' then datavalue else '0.0' end ) as 降水量,
+    max( case paramname when '空气质量' then datavalue else '' end ) as 空气质量,
+    max( case paramname when '预测风力' then datavalue else '0.0' end ) as 预测风力
+			from (
+				select DISTINCT b.objid,d.objname,b.paramid,c.paramname,a.datavalue,a.collecttime,b.devicenumber
+				from cp_collect_weatheractual  a 
+				left join cp_connect_objparam b on a.dataguid = b.dataguid
+				left join cp_info_param  c on b.paramid = c.paramid
+				left join cp_info_obj d on b.objid = d.objid
+				where d.objtypeid = 19
+					<!--and b.objid =927-->
+					and d.objname like '%${objname}%'
+					and b.devicenumber ='16-1'
+				order by a.collecttime desc
+				) coll
+			group by objid,collecttime,objname
+			order by collecttime desc limit 1
+	</select>
+</mapper>

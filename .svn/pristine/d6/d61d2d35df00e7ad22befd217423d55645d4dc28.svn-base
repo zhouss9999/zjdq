@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.reportfrom.mapping.Reportfrommapper">
+	<!-- 查询需要同步数据的微站 -->
+	<select id="getwz" parameterType="map" resultType="map">
+		select DISTINCT a.objid,a.objtypeid,a.objname,COALESCE(b.devicenumber,'') as devicenumber ,COALESCE(c.devicename,'') as devicename,COALESCE(c.rmk1,'') as rmk1
+		from cp_info_obj a 
+		left join cp_connect_objparam b on a.objid = b.objid and b.isused=1 
+		left join cp_info_device c on b.devicenumber = c.devicenumber
+		where c.devicetypeid = 4
+		<if test="objtypeid!=null and objtypeid!=''">
+			and a.objtypeid = ${objtypeid}
+		</if>
+		<if test="objid!=null and objid!='' ">
+			and a.objid = ${objid}
+		</if>
+	</select>
+	<!-- 获取小时数据 -->
+	<select id="queryrealData" parameterType="map" resultType="map">
+		select objid,objname,collecttime,devicenumber,
+    max( case paramname when 'AQI' then datavalue else '0.0' end ) as aqi,
+    max( case paramname when 'so2' then datavalue else '0.0' end ) as so2,
+    max( case paramname when 'no2' then datavalue else '0.0' end ) as no2,
+    max( case paramname when 'pm10' then datavalue else '0.0' end ) as pm10,
+    max( case paramname when 'pm25' then datavalue else '0.0' end ) as pm25,
+    max( case paramname when 'pm10_24h' then datavalue else '0.0' end ) as pm10_24h,
+    max( case paramname when 'pm25_24h' then datavalue else '0.0' end ) as pm25_24h,
+    max( case paramname when 'co' then datavalue else '0.0' end ) as co,
+    max( case paramname when 'o3' then datavalue else '0.0' end ) as o3,
+    max( case paramname when 'o38' then datavalue else '0.0' end ) as o38,
+    max( case paramname when 'quality' then datavalue else '-' end ) as quality,
+    max( case paramname when 'primary_pollutant' then datavalue else '-' end ) as primary_pollutant
+			from (
+				select DISTINCT b.objid,d.objname,b.paramid,c.paramname,a.datavalue,a.collecttime,b.devicenumber
+				from cp_collect_actual  a 
+				left join cp_connect_objparam b on a.dataguid = b.dataguid
+				left join cp_info_param  c on b.paramid = c.paramid
+				left join cp_info_obj d on b.objid = d.objid
+				where d.objtypeid = ${objtypeid}
+				<if test="objid!=null and objid!=''">
+					and b.objid = ${objid}
+				</if>
+				<if test="begintime != null and begintime != ''">
+					and a.collecttime &gt;= #{begintime}::timestamp 
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and a.collecttime &lt;= #{endtime}::timestamp 
+				</if>
+				order by a.collecttime desc
+				) coll
+			group by objid,collecttime,devicenumber,objname
+			order by collecttime desc
+	</select>
+</mapper>

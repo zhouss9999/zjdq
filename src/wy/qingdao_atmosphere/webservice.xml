@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"   
+       xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"  
+       xmlns:context="http://www.springframework.org/schema/context"  
+       xmlns:jaxws="http://cxf.apache.org/jaxws"  
+       xmlns:tx="http://www.springframework.org/schema/tx"  
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd  
+       http://mybatis.org/schema/mybatis-spring http://mybatis.org/schema/mybatis-spring.xsd  
+       http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd 
+       http://cxf.apache.org/jaxws 
+       http://cxf.apache.org/schemas/jaxws.xsd 
+       http://cxf.apache.org/simple 
+       http://cxf.apache.org/schemas/simple.xsd  
+       http://www.springframework.org/schema/tx   
+       http://www.springframework.org/schema/tx/spring-tx-2.5.xsd ">      
+  
+   <!-- 导入CXF的配置文件 -->  
+    <import resource="classpath:META-INF/cxf/cxf.xml" />    
+    <import resource="classpath:META-INF/cxf/cxf-extension-soap.xml" />    
+    <import resource="classpath:META-INF/cxf/cxf-servlet.xml" />    
+  
+  	  
+  	<!--  webservice暴露接口-->
+    <!-- <bean id="hbapprovalbean" class="wy.ycyd.hbapproval.service.HbapprovalServiceImpl">  
+    </bean>   
+    
+    <jaxws:server id="hbapproval" address="/cxfhbapproval">
+        <jaxws:serviceBean>
+            <ref bean="hbapprovalbean"/>
+        </jaxws:serviceBean>
+    </jaxws:server>
+    
+     <bean id="enterprisebean" class="wy.ycyd.enterprise.service.EnterpriseServiceImpl">  
+    </bean>   
+    
+    <jaxws:server id="enterprise" address="/cxfenterprise">
+        <jaxws:serviceBean>
+            <ref bean="enterprisebean"/>
+        </jaxws:serviceBean>
+    </jaxws:server> -->
+</beans>

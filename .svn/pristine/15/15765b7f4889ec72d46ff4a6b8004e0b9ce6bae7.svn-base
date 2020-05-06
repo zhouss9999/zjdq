@@ -1,0 +1,53 @@
+package wy.qingdao_atmosphere.countrysitedata.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.support.SqlSessionDaoSupport;
+import org.springframework.stereotype.Repository;
+
+import wy.qingdao_atmosphere.countrysitedata.domain.Param;
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.countrysitedata.domain.SiteData;
+import wy.qingdao_atmosphere.countrysitedata.domain.Threshold;
+
+@Repository("siteDataDao")
+public class SiteDataDaoImpl extends SqlSessionDaoSupport implements SiteDataDao {
+	
+	@Resource
+	public void setSuperSessionFactory(SqlSessionFactory sessionFactory) {
+		this.setSqlSessionFactory(sessionFactory);
+	}
+
+	public int addCollectData(List<SiteData> list) {
+		return this.getSqlSession().insert("addCollectData", list);
+	}
+
+	public List<Param> getParamByDtid(Map<String, Object> map) {
+		return this.getSqlSession().selectList("getParamByDtid", map);
+	}
+
+	public List<ParamAssis> getParamAssisByDtid(Map<String, Object> map) {
+		return this.getSqlSession().selectList("getParamAssisByDtid", map);
+	}
+
+	public int delCollData(Map<String, Object> map) {
+		return this.getSqlSession().delete("delCollData", map);
+	}
+
+	public List<String> getObjidByOtid(int objtypeid) {
+		return this.getSqlSession().selectList("getObjidByOtid", objtypeid);
+	}
+
+	public String getsubStoreMaxtime(Map<String, Object> map) {
+		return this.getSqlSession().selectOne("getsubStoreMaxtime", map);
+	}
+
+	public int addWbfsThrinfo(List<Threshold> list) {
+		return this.getSqlSession().insert("addWbfsThrinfo", list);
+	}
+
+}

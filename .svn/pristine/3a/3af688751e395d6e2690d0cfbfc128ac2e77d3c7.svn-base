@@ -1,0 +1,33 @@
+package wy.qingdao_atmosphere.countrysitedata.web;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.qingdao_atmosphere.countrysitedata.service.TimedtaskService;
+
+@Controller
+public class SiteDataController {
+	
+	@Autowired
+	private TimedtaskService timedtaskService;
+	
+	/**
+	 * @author zzb
+	 * @description 启动定时器
+	 */
+	@RequestMapping(value = "/startTimer.do",method = RequestMethod.GET,produces={"application/json;charset=utf-8"})
+	@ResponseBody
+	public void startTimer(HttpServletRequest request){
+		
+		Logger.getLogger("").info("------启动定时器---------");
+		timedtaskService.synchronizeWxytPic();
+	}
+	
+}

@@ -1,0 +1,137 @@
+package wy.qingdao_atmosphere.datacenter.web;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.sun.org.apache.bcel.internal.generic.NEW;
+
+import net.sf.json.JSONArray;
+
+public class WeatherTest {
+
+	/**
+	 * @param args
+	 * @throws Exception 
+	 */
+	public static void main(String[] args) throws Exception {
+		// TODO Auto-generated method stub
+		//http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR=2018&MONTH=07&FROM=0912&TO=1000&STNM=54857
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+		while (true) {
+			String json = gettkqx();
+			System.out.println(format.format(new Date())+" : "+json);
+			FileWriter fw = null;
+			try {
+				//如果文件存在，则追加内容；如果文件不存在，则创建文件
+				File f=new File("E:\\driveName\\tkqx.txt");
+				fw = new FileWriter(f, true);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			PrintWriter pw = new PrintWriter(fw);
+			pw.println(format.format(new Date())+" : "+json);
+			pw.flush();
+			try {
+				fw.flush();
+				pw.close();
+				fw.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			Thread.sleep(1000*60*20);
+//			Thread.sleep(10000);
+		}
+		
+	}
+
+	public static String gettkqx(){
+		String a = null;
+		try {
+			String url = "http://weather.uwyo.edu/cgi-bin/sounding?region=seasia&TYPE=TEXT%3ALIST&YEAR=2018&MONTH=08&FROM=1500&TO=1512&STNM=54857";
+			BufferedReader in = new BufferedReader(new InputStreamReader(
+					new URL(url).openConnection().getInputStream(), "GB2312"));//GB2312可以根据需要替换成要读取网页的编码
+			boolean ishas = false;//需要处理的内容
+			boolean isStation = false;
+			int topNumber = 0;
+			List<Map<String, Object>> topName = new ArrayList<Map<String,Object>>();
+			List<Map<String, Object>> resultList = new ArrayList<Map<String,Object>>();
+			while ((a = in.readLine()) != null) {
+//				System.out.println(a);
+				if(a.contains("Station identifier")){
+					isStation = true;
+				}
+				if(a.contains("</PRE>")){
+					ishas = false;
+				}
+				if(ishas){
+					if(isStation){
+						//处理下半段
+						
+					}else{
+						//处理上半段
+//						System.out.println(a);
+						char [] chara = a.toCharArray();
+						//获取表头信息
+						if(topNumber==1){
+							int start = 0;
+							int end = 0;
+							for(int i =0;i<chara.length;i++){
+								if(chara[i]==' '&&chara[i+1]!=' '){
+									start = i+1;
+								}
+								if(i==chara.length-1||(chara[i+1]==' '&&chara[i]!=' ')){
+									end = i;
+									String name = "";
+									for (int j = start; j <= end; j++) {
+										name += chara[j];
+									}
+									Map<String, Object> map = new HashMap<String, Object>();
+									map.put("name", name);
+									map.put("index", end);
+									topName.add(map);
+								}
+								
+							}
+						}
+						
+						if(topNumber>3){
+							Map<String, Object> map = new HashMap<String, Object>();
+							int startVal = 0;
+							for(int i = 0 ; i<topName.size();i++){
+								int index = (Integer) topName.get(i).get("index");
+								map.put(topName.get(i).get("name").toString(), a.substring(startVal,index+1).trim());
+								startVal = index+1;
+							}
+							resultList.add(map);
+						}
+						
+						topNumber++;
+					}
+//					String text = a.trim().replaceAll("\\s+",",");
+				}
+				if(a.contains("<PRE>")){
+					ishas = true;
+				}
+			}
+			JSONArray json = JSONArray.fromObject(resultList); 
+//			System.out.println(json.toString());
+			return json.toString();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
+		}
+		
+	}
+}

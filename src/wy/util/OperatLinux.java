@@ -1,0 +1,328 @@
+package wy.util;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.log4j.Logger;
+
+import ch.ethz.ssh2.ChannelCondition;
+import ch.ethz.ssh2.Connection;
+import ch.ethz.ssh2.SCPClient;
+import ch.ethz.ssh2.Session;
+import ch.ethz.ssh2.StreamGobbler;
+
+
+/**
+ * 连接Linux服务器并执行相关的shell命令以及对文件的操作
+ * @author zzb
+ * @date 2018年9月30日09:23:18
+ */
+public class OperatLinux {
+
+	private static final String DEFAULTCHARTSET = "UTF-8";
+	private static Connection conn;
+
+
+	/**
+	 * 用户名密码方式  远程登录Linux服务器
+	 * @param ip		主机名
+	 * @param port 		端口,如果取默认值(默认值22),传-1
+	 * @param user		用户名
+	 * @param password	密码
+	 * @return boolean
+	 * 	登录成功返回true,否则返回false
+	 */
+	public static boolean login(String ip, int port, String user, String password) {
+
+		boolean flag = false;
+		try {
+			//根据主机IP、端口获取一个连接
+			if(port <=0){
+				//连接服务器，采用默认端口 :22
+				conn = new Connection(ip);
+			}else{
+				//采用指定的端口连接服务器  
+				conn = new Connection(ip,port);
+			}
+
+			//连接
+			conn.connect();
+			//认证
+			flag = conn.authenticateWithPassword(user, password);
+
+			if (flag) {
+				Logger.getLogger("").info("认证成功！");
+			} else {
+				Logger.getLogger("").info("认证失败...");
+				conn.close();
+			}
+		} catch (IOException e) {
+			Logger.getLogger("").info("连接失败...");
+		}
+
+		return flag;
+	}
+
+
+	/**
+	 * 远程执行shll脚本或者命令
+	 * @param cmds 		脚本命令,多个命令用分号隔开
+	 * @return String 	命令执行完后返回的结果值
+	 */
+	public static String execute(String cmds){
+
+		String result = "";
+		InputStream inputStream = null;
+		Session session = null;
+		try {
+			//打开一个会话
+			session = conn.openSession();
+			
+			// 建立虚拟终端
+			session.requestPTY("bash");
+			// 打开一个Shell
+			session.startShell();
+			// 准备输入命令
+			PrintWriter out = new PrintWriter(session.getStdin());
+			// 输入待执行命令
+			out.println(cmds);
+			out.println("exit");
+			//关闭输入流
+			out.close();
+			// 等待，除非1.连接关闭；2.输出数据传送完毕；3.进程状态为退出；4.超时
+			session.waitForCondition(ChannelCondition.CLOSED | ChannelCondition.EOF | ChannelCondition.EXIT_STATUS , 30000);
+			
+			inputStream = session.getStdout();
+			result = processStdout(inputStream, DEFAULTCHARTSET);
+			// 如果为得到标准输出为空，说明脚本执行出错了
+			if (StringUtils.isBlank(result)) {
+				result = processStdout(inputStream, DEFAULTCHARTSET);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			Logger.getLogger("").info("打开会话失败...");
+		} finally {
+			if (session != null) {
+				session.close();
+			}
+			try {
+				if (inputStream != null) {
+					inputStream.close();
+				}
+			} catch (IOException e) {
+				Logger.getLogger("").info("IO流关闭异常...");
+			}
+		}
+
+		return result;
+	}
+
+
+	/**
+	 * 远程执行shell脚本或者命令
+	 * @param cmds 脚本命令,多个命令用分号隔开
+	 * @return String命令执行成功后返回的结果值，如果命令执行失败，返回空字符串，不是null
+	 */
+	public static String executeSuccess(String cmds){
+
+		String result = "";
+		InputStream inputStream = null;
+		Session session = null;
+		try {
+			//打开一个会话
+			session = conn.openSession();
+			
+			// 建立虚拟终端
+			session.requestPTY("bash");
+			// 打开一个Shell
+			session.startShell();
+			// 准备输入命令
+			PrintWriter out = new PrintWriter(session.getStdin());
+			// 输入待执行命令
+			out.println(cmds);
+			out.println("exit");
+			//关闭输入流
+			out.close();
+			// 等待，除非1.连接关闭；2.输出数据传送完毕；3.进程状态为退出；4.超时
+			session.waitForCondition(ChannelCondition.CLOSED | ChannelCondition.EOF | ChannelCondition.EXIT_STATUS , 30000);
+			
+			inputStream = session.getStdout();
+			result = processStdout(inputStream, DEFAULTCHARTSET);
+		} catch (Exception e) {
+			Logger.getLogger("").info("打开会话失败...");
+		} finally {
+			if (session != null) {
+				session.close();
+			}
+			try {
+				if (inputStream != null) {
+					inputStream.close();
+				}
+			} catch (IOException e) {
+				Logger.getLogger("").info("IO流关闭异常...");
+			}
+		}
+
+		return result;
+
+	}
+
+
+
+	/**
+	 * 解析脚本执行的返回结果
+	 * @param inputStream 
+	 * @param charset 编码 
+	 * @return String 以纯文本的格式返回
+	 */
+	public static String processStdout(InputStream inputStream, String charset){
+
+		InputStream stdout = new StreamGobbler(inputStream);
+		String result = "";
+		try {
+			//等待100毫秒,让部分流完成,防止太快导致流大小一直是0
+			Thread.sleep(100);
+			if (stdout.available() > 0) { //如果输入流有值
+//				BufferedReader br = new BufferedReader(new InputStreamReader(stdout, charset));
+//				String line = null;
+//				while ((line = br.readLine()) != null) {
+//					//buffer.append(line + "\n");
+//					System.out.println(line);
+//				}
+//				br.close();
+				//线程等待5秒生成图片
+				Thread.sleep(5000);
+				result = "true";
+			}
+		} catch (Exception e) {
+			Logger.getLogger("").info("文本解析异常...");
+		} finally {
+			try {
+				inputStream.close();
+			} catch (IOException e) {
+				Logger.getLogger("").info("IO流关闭异常...");
+			}
+		}
+
+		return result;
+
+	}
+
+	/**
+	 * 远程执行shell脚本或者命令
+	 * @param cmds 脚本命令,多个命令用分号隔开
+	 * @return String命令执行成功后返回的结果值，如果命令执行失败，返回空字符串，不是null
+	 * 执行exe程序剪裁图片
+	 */
+	public static String executeExe(String cmds){
+
+		String result = "";
+		InputStream inputStream = null;
+		Session session = null;
+		try {
+			//打开一个会话
+			session = conn.openSession();
+			
+			//session.execCommand(cmds);
+			// 建立虚拟终端
+			session.requestPTY("bash");
+			// 打开一个Shell
+			session.startShell();
+			
+			// 准备输入命令
+			PrintWriter out = new PrintWriter(session.getStdin());
+			// 输入待执行命令
+			out.println(cmds);
+			out.println("exit");
+			//关闭输入流
+			out.close();
+			// 等待，除非1.连接关闭；2.输出数据传送完毕；3.进程状态为退出；4.超时
+			session.waitForCondition(ChannelCondition.CLOSED | ChannelCondition.EOF | ChannelCondition.EXIT_STATUS , 30000);
+			
+			inputStream = session.getStdout();
+			if(inputStream.read()>0){
+				result = "true";
+			}
+		} catch (Exception e) {
+			Logger.getLogger("").info("打开会话失败...");
+		} finally {
+			if (session != null) {
+				session.close();
+			}
+			try {
+				if (inputStream != null) {
+					inputStream.close();
+				}
+			} catch (IOException e) {
+				Logger.getLogger("").info("IO流关闭异常...");
+			}
+		}
+
+		return result;
+
+	}
+
+	/**
+	 * 从其他服务器获取文件到本服务器指定目录
+	 * @param remoteFile	文件位置(其他服务器)
+	 * @param localDir		本服务器目录
+	 */
+	public static boolean scpGet(String remoteFile, String localDir) {
+
+		Logger.getLogger("").info("从其他服务器获取文件到本服务器指定目录");
+		boolean flag = false;
+
+		SCPClient client = new SCPClient(conn);
+		try {
+			client.get(remoteFile, localDir);
+			flag = true;
+		} catch (IOException e) {
+			Logger.getLogger("").info("从其他服务器获取文件到本服务器失败...");
+		}
+
+		return flag;
+	}
+
+
+	/**
+	 * 将文件复制到其他计算机中
+	 * @param localFile	本服务器目录
+	 * @param remoteDir	文件位置(其他服务器)
+	 */
+	public static boolean scpPut(String localFile, String remoteDir) {
+
+		Logger.getLogger("").info("将文件复制到其他计算机中");
+		boolean flag = false;
+
+		SCPClient client = new SCPClient(conn);
+		try {
+			client.put(localFile, remoteDir);
+			flag = true;
+		} catch (IOException e) {
+			Logger.getLogger("").info("将文件复制到其他服务器失败...");
+		}
+
+		return flag;
+	}
+
+	/**
+	 * 关闭连接
+	 */
+	public static void closeConnect(){
+		if (conn != null) {
+			conn.close();
+		}
+	}
+	
+	//测试服务器上ncl以及exe
+//	public static void main(String[] args) {
+//		boolean lflag = OperatLinux.login(OperatLinuxNcl.ip, OperatLinuxNcl.port, OperatLinuxNcl.user, OperatLinuxNcl.password);
+//		//execute("ncl /home/nclpng/draw.ncl");
+//		executeExe("cd /home/nclpng/model/Debug \n mono ClipPngByPolygon.exe");
+//	}
+	
+
+}
+

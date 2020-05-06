@@ -1,0 +1,113 @@
+package wy.qingdao_atmosphere.weatheranalyze.service;
+
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletResponse;
+
+import org.apache.commons.net.ftp.FTPClient;
+
+/**
+ * @author xsq
+ * @description 气象分析Service层接口
+ * 
+ */
+public interface WeatherAnalyzeService {
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取网格预测图片
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)、wind-vec-black(风向箭头图-黑色)、wind-vec-white(风向箭头图-白色)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param forecastDate 日期
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return List<String>
+	 */
+	public List<String> getWeatherImgUrl(FTPClient ftpClient, String weathertype, String forecastDate, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取实时数据
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param forecastDate 日期
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherActualData(FTPClient ftpClient, String weathertype, String forecastDate, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取日数据
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param forecastDate 日期
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherDayData(FTPClient ftpClient, String weathertype, String forecastDate, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间获取网格图片xy坐标信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype参数：WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)
+	 * @param forecastDate 日期
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWeatherImgXYInfo(FTPClient ftpClient, String weathertype, String forecastDate, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取风场UV数据信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)],CALPUF模式：[wind(风场)]
+	 * @param forecastDate 日期时间
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFOrCALPUFWindUVDataInfo(String weathertype, String forecastDate, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取数据信息
+	 * @param ftpClient ftp连接客户端
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param forecastDate 日期
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFOrCALPUFWeatherData(String weathertype, String forecastDate, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度和经纬度获取网格数据信息
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param lonlat 经纬度
+	 * @param forecastTime 时间
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFOrCALPUFGriddingDataInfo(String weathertype, String lonlat, String forecastTime, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度和经纬度获取24小时网格数据信息
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param lonlat 经纬度
+	 * @param forecastDate 时间
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @return Map
+	 */
+	public Map<String, Object> getWRFOrCALPUF24HoursGriddingDataInfo(String weathertype, String lonlat, String forecastDate, double height, String patternType);
+	
+	/**
+	 * @description 根据WRF/CALPUF模式的气场类型和时间以及高度获取网格数据文件下载
+	 * @param weathertype 参数：WRF模式：[WindMap(风场)、RainMap(降雨)、PressureMap(气压)、TemperatureMap(温度)、RHMap(相对湿度)],CALPUF格式：[NOX、PM2.5、PM10、SO2、mix(混合层高度)、pgt(大气稳定度)、temp(温度)、wind(风场)]
+	 * @param forecastTime 时间
+	 * @param height 高度
+	 * @param patternType 模式类型:WRF/CALPUF
+	 * @param WDROrWSP 风速或风向
+	 * @return Map
+	 */
+	public void getWRFOrCALPUFGriddingDataFileDownload(String weathertype, String forecastTime, double height, String patternType, String WDROrWSP, HttpServletResponse response) throws Exception;
+}

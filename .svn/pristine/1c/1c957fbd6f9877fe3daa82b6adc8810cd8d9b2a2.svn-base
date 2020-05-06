@@ -1,0 +1,122 @@
+package wy.qingdao_atmosphere.reportform.web;
+
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import wy.qingdao_atmosphere.reportform.service.ReportformService;
+import wy.util.AirBean;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+@Controller
+public class ReportformController {
+
+	@Autowired
+	private BaseaddDao baseaddDao;
+
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private ReportformService reportformService;
+	
+	/**
+	 * 查询微站站点
+	 * @param request
+	 * @return
+	 */
+	@RequestMapping(value = "/getwz.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> getwz(HttpServletRequest request){
+		String objtypeid = request.getParameter("objtypeid") == null?"":request.getParameter("objtypeid").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objtypeid", objtypeid);
+		List<Map<String,Object>> list = reportformService.getwz(map);
+		HashSet<Map<String,Object>> h = new HashSet<Map<String,Object>>();
+		for(Map<String,Object> m:list){
+			m.remove("devicename");
+			m.remove("devicenumber");
+			m.remove("rmk1");
+			m.remove("objtypeid");
+			h.add(m);
+		}
+		list.clear();
+		list.addAll(h);
+		return list;
+	}
+	
+	//微站小时数据和日数据查询
+	@RequestMapping(value = "/queryrealTime.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> queryrealTime(HttpServletRequest request){
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		String objtypeid = request.getParameter("objtypeid") == null?"":request.getParameter("objtypeid").toString();
+		String begintime = request.getParameter("begintime") == null?"":request.getParameter("begintime").toString();
+		String endtime = request.getParameter("endtime") == null?"":request.getParameter("endtime").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objid", objid);
+		map.put("begintime", begintime);
+		map.put("endtime", endtime);
+		map.put("objtypeid", objtypeid);//1监测站点实时数据     2监测站点日数据
+		List<Map<String,Object>> list = reportformService.queryrealData(map);
+		return list;
+	}
+	
+	//月报
+	@RequestMapping(value = "/queryMonthlyReport.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> queryMonthlyReport(HttpServletRequest request) throws Exception{
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		if(objid.equals("")){
+			return null;
+		}
+		String begintime = request.getParameter("begintime") == null?"":request.getParameter("begintime").toString();
+		String endtime = request.getParameter("endtime") == null?"":request.getParameter("endtime").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objid", objid);
+		map.put("begintime", begintime);
+		map.put("endtime", endtime);
+		map.put("objtypeid", 2);// 2监测站点日数据
+		List<Map<String,Object>> list = reportformService.queryrealData(map);
+		return reportformService.queryMonthlyReport(list);
+	}
+	
+
+	//年报
+	@RequestMapping(value = "/queryYearReport.do", method = RequestMethod.GET, produces = { "application/json;charset=utf-8" })
+	@ResponseBody
+	public List<Map<String,Object>> queryYearReport(HttpServletRequest request) throws Exception{
+		String objid = request.getParameter("objid") == null?"":request.getParameter("objid").toString();
+		if(objid.equals("")){
+			return null;
+		}
+		String begintime = request.getParameter("begintime") == null?"":request.getParameter("begintime").toString();
+		String endtime = request.getParameter("endtime") == null?"":request.getParameter("endtime").toString();
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objid", objid);
+		map.put("begintime", begintime);
+		map.put("endtime", endtime);
+		map.put("objtypeid", 2);// 2监测站点日数据
+		List<Map<String,Object>> list = reportformService.queryrealData(map);
+		return reportformService.queryYearReport(list);
+	}
+	
+	
+	
+}

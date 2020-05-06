@@ -1,0 +1,867 @@
+package wy.qingdao_atmosphere.countrysitedata.service;
+
+import java.io.File;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.ServletContext;
+
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+//import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.web.context.ContextLoader;
+
+import cmcc.iot.onenet.javasdk.api.datapoints.AddDatapointsApi;
+import cmcc.iot.onenet.javasdk.model.Data;
+import cmcc.iot.onenet.javasdk.model.Datapoints;
+import cmcc.iot.onenet.javasdk.response.BasicResponse;
+
+import wy.qingdao_atmosphere.countrysitedata.dao.SiteDataDao;
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.countrysitedata.domain.SiteData;
+import wy.qingdao_atmosphere.countrysitedata.domain.Param;
+import wy.qingdao_atmosphere.onemap.dao.OneMapDao;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.util.DatapointsApiThreadUtil;
+import wy.util.FtpUtil;
+import wy.util.OperatFile;
+import wy.util.OperatLinux;
+import wy.util.OperatLinuxNcl;
+import wy.util.SendHttpRequest;
+import wy.util.datapersistence.AttachSubinfoStore;
+import wy.util.datapersistence.SpaceInfo;
+import wy.util.datapersistence.Dao.BaseaddDao;
+import wy.util.datapersistence.service.BaseService;
+
+@Component
+public class TimedtaskService {
+	
+	//国站数据同步参数(www.pm25.in)
+	private final String URL = "http://www.pm25.in/api/querys/aqi_details.json";
+	private final String APPKEY = "5j1znBVAsnSf5xQyNQyq";
+	private final String CITY = "青岛";
+	
+	//站点微波辐射数据同步参数(FTP)
+	private final String FTP_IP = "121.196.198.37";
+	private final int    FTP_PORT = 21;
+	private final String FTP_USERNAME = "wyftp";
+	private final String FTP_PASSWORD = "wy!@#456";
+	
+	@Autowired
+	public BaseaddDao baseaddDao;
+	
+	@Autowired
+	public BaseService baseService;
+	
+	@Autowired
+	public SiteDataService siteDataService;
+	
+	@Autowired
+	public SiteDataDao siteDataDao;
+	
+	@Autowired
+	public OneMapDao oneMapDao;
+
+	
+	/**  
+     * 每个整点执行一次  ,国站实时数据
+     */    
+	//@Scheduled(cron = "0 0 * * * ?")
+    public void timeTask(){
+		Logger.getLogger("").info("-----------国站实时数据同步任务开始-------------");
+		
+		try {
+			long begin = System.currentTimeMillis();
+			
+			long objtypeid = 5;
+			String[] netparam = {"aqi","pm2_5","pm10","co","no2","so2","o3","o3_8h","primary_pollutant","quality"};
+			//同步数据
+			int status = addSiteData(objtypeid, netparam);
+			
+			long end = System.currentTimeMillis();
+			if (status > 0) {
+				Logger.getLogger("").info("国站实时数据同步任务结束，共耗时：[" + (end - begin)/1000 + "]秒");
+			} else {
+				Logger.getLogger("").info("国站实时数据已经是最新数据");
+			}
+			
+		} catch (Exception e) {
+			Logger.getLogger("").info("国站实时数据同步服务异常");
+		}
+    }
+	
+    
+	/**  
+     * 每晚24时执行一次 ,国站日数据
+     */ 
+    //@Scheduled(cron = "0 0 0 * * *") 
+    public void dayTask() {
+    	
+    	Logger.getLogger("").info("-----------国站日数据同步任务开始-------------");
+		
+		try {
+			long begin = System.currentTimeMillis();
+			
+			long objtypeid = 6;
+			String[] netparam = {"aqi","pm2_5_24h","pm10_24h","co_24h","no2_24h","so2_24h","o3_24h","o3_8h_24h","primary_pollutant","quality"};
+			
+			//同步数据
+			int status = addSiteData(objtypeid, netparam);
+			
+			long end = System.currentTimeMillis();
+			
+			if (status > 0) {
+				Logger.getLogger("").info("国站日数据同步任务结束，共耗时：[" + (end - begin)/1000 + "]秒");
+			} else {
+				Logger.getLogger("").info("国站日数据已经是最新数据");
+			}
+			
+		} catch (Exception e) {
+			Logger.getLogger("").info("国站日数据同步服务异常");
+		}
+    	
+    }  
+    
+    
+    /***
+     * 将国站数据同步到数据库
+     * @param objtypeid
+     * @param netparam
+     * @return status
+     */
+	private int addSiteData(long objtypeid, String[] netparam) {
+		
+		int status = 0;
+		try {
+			String city = URLEncoder.encode(CITY, "UTF-8");
+			//单个城市所有站点
+			String siteData=SendHttpRequest.sendGet(URL, "city="+city+"&token="+APPKEY);
+			//所有城市
+			//String siteData=SendHttpRequest.sendGet("http://www.pm25.in/api/querys/all_cities.json", "");
+			
+			//获取所有国站数据对象基本信息
+			Map<String, Object> paramMap = new HashMap<String, Object>();
+			paramMap.put("objtypeid", objtypeid);
+			List<Map<String,Object>> sitelist = baseService.selectForCpAttachInfoStoreTwo(paramMap, "");
+			Map<String, Map<String, Object>> siteMap = new LinkedHashMap<String, Map<String,Object>>();
+			//此处优化程序,放入map
+			if (sitelist.size() > 0) {
+				for (Map<String, Object> map : sitelist) {
+					siteMap.put(map.get("sitenumber").toString(), map);
+				}
+			}
+			
+			List<Param> paramList = siteDataService.getParamByDtid("1");
+			Map<Integer, Param> pMap = new LinkedHashMap<Integer, Param>();
+			if (paramList.size() > 0) {
+				for (Param param : paramList) {
+					pMap.put(param.getParamid(), param);
+				}
+			}
+			/*Map<String, Param> pMap = new LinkedHashMap<String, Param>();
+			if (paramList.size() > 0) {
+				for (Param param : paramList) {
+					pMap.put(param.getParamname(), param);
+				}
+			}*/
+			
+			List<SiteData> sdList = new ArrayList<SiteData>();
+			
+			//字符串转成 JSONArray对象
+			JSONArray json = JSONArray.fromObject(siteData); 
+
+			//String[] dbparam = {"AQI","PM25","PM10","CO","NO2","SO2","O3","O38","primary_pollutant","quality"};
+			int[] dbparam = {1,2,3,4,5,6,7,97,8,9};
+			 
+			if(json.size()>0 && json.getJSONObject(0).get("error") == null){
+				
+				String coltime = json.getJSONObject(0).get("time_point").toString().replace("T", " ").replace("Z", "");
+				String maxtime = baseaddDao.selectMaxTime("yyyy-MM-dd HH24:MI:ss", objtypeid+"_%_10001_%");
+				
+				//比较数据库最新时间，看监测数据是否存在，防止重复
+				int compare = 0;
+				if (maxtime != null && !"".equals(maxtime)) {
+					compare = coltime.compareTo(maxtime);
+				} else {//刚开始没有数据的情况,默认新增一条记录
+					compare = 1;
+				}
+				
+				if (compare > 0) {
+					for(int i=0;i<json.size();i++){//遍历 jsonarray 数组，把每一个对象转成 json对象
+						JSONObject job = json.getJSONObject(i);
+						
+						//job.get("time_point")的格式2018-07-17T10:00:00Z,需要转换
+						String collecttime = job.get("time_point").toString().replace("T", " ").replace("Z", "");
+						
+						if (siteMap.containsKey(job.get("station_code").toString())) {
+							Map<String, Object> map = siteMap.get(job.get("station_code").toString());
+							
+							for (int j = 0; j < dbparam.length; j++) {
+								if (pMap.containsKey(dbparam[j])) {
+									SiteData sd = new SiteData();
+									sd.setDataguid(objtypeid+"_"+map.get("objid").toString()+"_"+"10001"+"_"+pMap.get(dbparam[j]).getParamid());
+									if (job.get(netparam[j]) == null || "null".equals(job.get(netparam[j]).toString())) {
+										sd.setDatavalue("-");
+									} else {
+										sd.setDatavalue(job.get(netparam[j]).toString());
+									}
+									sd.setCollecttime(collecttime);
+									sdList.add(sd);
+								}
+							}
+						}
+					}
+					if (sdList.size() > 0) {
+						status = siteDataService.addCollectData(sdList);
+					}
+				}
+			}
+			
+		} catch (UnsupportedEncodingException e) {
+			Logger.getLogger("").info("国站数据同步服务异常");
+		}
+		return status;
+	} 
+	
+	
+	/**  
+     * 每个整点执行一次  ,站点微波辐射数据
+     */    
+	//@Scheduled(cron = "0 0 * * * ?")
+    public void siteDataRadiationTask(){
+		Logger.getLogger("").info("-----------站点微波辐射数据同步任务开始-------------");
+		
+		try {
+			long begin = System.currentTimeMillis();
+			
+			//同步辐射数据
+			int status = addFSData();
+			
+			long end = System.currentTimeMillis();
+			if (status > 0) {
+				Logger.getLogger("").info("站点微波辐射数据同步任务结束，共耗时：[" + (end - begin)/1000 + "]秒");
+			} else {
+				Logger.getLogger("").info("站点微波辐射数据已经是最新数据");
+			}
+			
+			//删除72小时之前的辐射数据
+			delBefore72();
+			
+		} catch (Exception e) {
+			Logger.getLogger("").info("站点微波辐射数据同步服务异常");
+		}
+    }
+
+    /**
+     * 删除72小时之前的辐射数据
+     */
+	private void delBefore72(){
+		try {
+			//获取数据库中辐射监测数据的最新时间
+			String maxtime = baseaddDao.getMaxTimeByDtid("yyyy-MM-dd HH24:MI:ss", "5", "");
+			//删除72小时之前的辐射数据
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+			Date date = new Date();
+			if (maxtime != null && "".equals(maxtime)) {
+				date = sdf.parse(maxtime);
+			}
+			Calendar calendar = Calendar.getInstance();
+			calendar.setTime(date);
+			calendar.set(Calendar.HOUR_OF_DAY, calendar.get(Calendar.HOUR_OF_DAY)-72);//72小时之前的数据
+			String collecttime = sdf.format(calendar.getTime());
+			
+			//删除72小时之前的辐射监测数据
+			siteDataService.delCollData(collecttime, "5");
+		} catch (Exception e) {
+			Logger.getLogger("").info("站点微波辐射数据删除异常");
+		}
+	}
+
+
+    /**
+     * 同步站点微波辐射数据
+     * @return status
+     */
+	private int addFSData() {
+		//获取数据库中辐射监测数据的最新时间
+		String maxtime = baseaddDao.getMaxTimeByDtid("yyyyMMddHH24MIss", "5", "");
+		
+		//连接FTP服务器
+		FTPClient ftpClient = FtpUtil.ftpConnection(FTP_IP, FTP_PORT, FTP_USERNAME, FTP_PASSWORD);
+		
+		//获取根目录下2小时之内的所有辐射数据
+		Map<String, List<String>> fileNameMap = FtpUtil.getFileList(ftpClient,2,maxtime);
+		
+		//断开FTP服务,防止FTP超时报异常
+		FtpUtil.ftpClose(ftpClient);
+		
+		//获取各种数据文件中的内容列表(格式：站点编号,时间,监测值)
+		List<String> jcList = fileNameMap.get("jcList");//基础数据内容列表
+		List<String> fyList = fileNameMap.get("fyList");//反演数据内容列表
+		List<String> wdList = fileNameMap.get("wdList");//稳定系统数据内容列表
+		List<String> ztList = fileNameMap.get("ztList");//状态数据内容列表
+		List<String> kxList = fileNameMap.get("kxList");//廓线数据内容列表
+		
+		//参数Map
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		//获取站点对象
+		paramMap.put("objtypeid", 12);
+		List<Map<String,Object>> sitelist = baseService.selectForCpAttachInfoStoreTwo(paramMap, "");
+		Map<String, Map<String,Object>> siteMap = new LinkedHashMap<String, Map<String,Object>>();
+		if (sitelist.size() > 0) {
+			for (Map<String,Object> site : sitelist) {
+				siteMap.put(site.get("sitenumber").toString(), site);
+			}
+		}
+		
+		//获取参数辅助对象
+		List<ParamAssis> parAssList = siteDataService.getParamAssisByDtid("5");
+		Map<String, ParamAssis> pMap = new LinkedHashMap<String, ParamAssis>();
+		if (parAssList.size() > 0) {
+			for (ParamAssis parAss : parAssList) {
+				pMap.put(parAss.getObjid() + "_" + parAss.getParamname(), parAss);
+			}
+		}
+		
+		//监测数据对象集合
+		List<SiteData> dataList = new ArrayList<SiteData>();
+		
+		//基础数据封装并同步到OneNet
+		String[] jcparam = {"站点编号","监测时间","jc_hwlw","jc_jyzt","jc_dmwd","jc_dmsd","jc_dmyq",
+							"jc_fwjd","jc_fyjd","jc_fs","jc_fx",
+							"jc_k1","jc_k2","jc_k3","jc_k4","jc_k5","jc_k6","jc_k7","jc_k8",
+							"jc_v1","jc_v2","jc_v3","jc_v4","jc_v5","jc_v6","jc_v7","jc_v8"};
+		insertDataList(jcList, siteMap, pMap, dataList, jcparam);
+		
+		//反演数据封装并同步到OneNet
+		String[] fyparam = {"站点编号","监测时间","fy_sqzhl","fy_ljytszhl","fy_ydgd","fy_hwlw","fy_fwjd","fy_fyjd"};
+		insertDataList(fyList, siteMap, pMap, dataList, fyparam);
+		
+		//稳定系统数据封装并同步到OneNet
+		String[] wdparam = {"站点编号","监测时间","wd_AI","wd_KI","wd_TTI","wd_LI","wd_SI","wd_LCL","wd_LFC","wd_EC","wd_BLH"};
+		insertDataList(wdList, siteMap, pMap, dataList, wdparam);
+		
+		//状态数据封装并同步到OneNet
+		String[] ztparam = {"站点编号","监测时间","zt_jd","zt_wd","zt_status"};
+		insertDataList(ztList, siteMap, pMap, dataList, ztparam);
+		
+		//廓线数据封装并同步到OneNet
+		insertDataList(kxList, siteMap, pMap, dataList, null);
+		
+		int status = 0;
+		if (dataList.size() > 0) {
+			status = siteDataService.addCollectData(dataList);
+		}
+		
+		return status;
+	}
+
+
+    /**
+     * 将数据封装到监测数据对象、并且同步到OneNet
+     * @param ftpFileList 文件内容列表
+     * @param siteMap 站点对象
+     * @param pMap 参数辅助对象
+     * @param dataList 监测数据对象集合
+     * @param paramArr
+     */
+	private void insertDataList(List<String> ftpFileList,Map<String, Map<String, Object>> siteMap,
+			Map<String, ParamAssis> pMap, List<SiteData> dataList,String[] paramArr) {
+		
+		if (paramArr != null) {
+			for (String ftpFile : ftpFileList) {
+				String[] fileArr = ftpFile.split(",");
+				if (siteMap.containsKey(fileArr[0])) {
+					//OneNet数据集合
+					List<Datapoints> onenetList = new ArrayList<Datapoints>();
+					
+					for (int i = 2, length = fileArr.length; i < length; i++) {
+						String mapKey = siteMap.get(fileArr[0]).get("objid").toString() + "_" + paramArr[i];
+						if (pMap.containsKey(mapKey)) {
+							//数据库封装
+							SiteData sd = new SiteData();
+							sd.setDataguid(pMap.get(mapKey).getDataguid());
+							sd.setDatavalue(fileArr[i]);
+							sd.setCollecttime(fileArr[1]);
+							dataList.add(sd);
+							
+							//同步到OneNet
+							List<Data> dl = new ArrayList<Data>();
+							dl.add(new Data(fileArr[1].replace(" ", "T"), fileArr[i]));
+							onenetList.add(new Datapoints(paramArr[i], dl));
+						};
+					}
+					
+					//同步到OneNet
+					Map<String, List<Datapoints>> onmap = new HashMap<String, List<Datapoints>>();
+					onmap.put("datastreams", onenetList);
+					
+					ParamAssis pa = pMap.get(siteMap.get(fileArr[0]).get("objid").toString() + "_" + paramArr[2]);
+					String devid = pa.getDevicenumber();
+					String key = pa.getRmk1();
+					
+					AddDatapointsApi api = new AddDatapointsApi(onmap, null, null, devid, key);
+					BasicResponse<Void> response = api.executeApi();
+					Logger.getLogger("").info("errno:"+response.errno+" error:"+response.error);
+				}
+			}
+		} else {
+			String[] kxflag = {"wd","xdsd","sqmd","zsl","bjcwd"};
+			String[] kxparam0 = { //包含类型(1:温度廓线2:相对湿度廓线3:水汽密度廓线4:折射率廓线)
+					"站点编号","监测时间","_type","_fc",
+					"_0","_100","_200","_300","_400","_500","_600","_700","_800","_900",
+					"_1000","_1100","_1200","_1300","_1400","_1500","_1600","_1700","_1800","_1900",
+					"_2000","_2250","_2500","_2750","_3000","_3250","_3500","_3750","_4000","_4250",
+					"_4500","_4750","_5000","_5250","_5500","_5750","_6000","_6250","_6500","_6750",
+					"_7000","_7250","_7500","_7750","_8000","_8250","_8500","_8750","_9000","_9250",
+					"_9500","_9750","_10000"
+			};
+			String[] kxparam1 = {//包含类型(5:边界层温度廓线)
+					"站点编号","监测时间","_type","_fc","_0","_25","_50","_75","_100",
+					"_125","_150","_175","_200","_225","_250","_275","_300","_325",
+					"_350","_375","_400","_425","_450","_475","_500","_550","_600",
+					"_650","_700","_750","_800","_850","_900","_950","_1000","_1100",
+					"_1200","_1300","_1400","_1500","_1600","_1700","_1800","_1900","_2000"
+			};
+			
+			for (String ftpFile : ftpFileList) {
+				String[] fileArr = ftpFile.split(",");
+				if (siteMap.containsKey(fileArr[0])) {
+					//OneNet数据集合
+					List<Datapoints> onenetList = new ArrayList<Datapoints>();
+					
+					String mapKey = "";
+					StringBuilder datavalue = new StringBuilder();
+					datavalue.append("{");
+					if ("1".equals(fileArr[2])) {
+						mapKey = siteMap.get(fileArr[0]).get("objid").toString() + "_kx_wdkx";
+						for (int i = 2, length = fileArr.length; i < length; i++) {
+							if (i != length - 1) {
+								datavalue.append("\""+kxflag[0]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\",");
+							} else {
+								datavalue.append("\""+kxflag[0]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\"}");
+							}
+						}
+					} else if ("2".equals(fileArr[2])){
+						mapKey = siteMap.get(fileArr[0]).get("objid").toString() + "_kx_xdsdkx";
+						for (int i = 2, length = fileArr.length; i < length; i++) {
+							if (i != length - 1) {
+								datavalue.append("\""+kxflag[1]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\",");
+							} else {
+								datavalue.append("\""+kxflag[1]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\"}");
+							}
+						}
+					} else if ("3".equals(fileArr[2])){
+						mapKey = siteMap.get(fileArr[0]).get("objid").toString() + "_kx_sqmdkx";
+						for (int i = 2, length = fileArr.length; i < length; i++) {
+							if (i != length - 1) {
+								datavalue.append("\""+kxflag[2]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\",");
+							} else {
+								datavalue.append("\""+kxflag[2]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\"}");
+							}
+						}
+					} else if ("4".equals(fileArr[2])){
+						mapKey = siteMap.get(fileArr[0]).get("objid").toString() + "_kx_zslkx";
+						for (int i = 2, length = fileArr.length; i < length; i++) {
+							if (i != length - 1) {
+								datavalue.append("\""+kxflag[3]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\",");
+							} else {
+								datavalue.append("\""+kxflag[3]+kxparam0[i]+"\":" + "\"" + fileArr[i] + "\"}");
+							}
+						}
+					} else if ("5".equals(fileArr[2])){
+						mapKey = siteMap.get(fileArr[0]).get("objid").toString() + "_kx_bjcwdkx";
+						for (int i = 2, length = fileArr.length; i < length; i++) {
+							if (i != length - 1) {
+								datavalue.append("\""+kxflag[4]+kxparam1[i]+"\":" + "\"" + fileArr[i] + "\",");
+							} else {
+								datavalue.append("\""+kxflag[4]+kxparam1[i]+"\":" + "\"" + fileArr[i] + "\"}");
+							}
+						}
+					}
+					
+					//封装数据
+					if (pMap.containsKey(mapKey)) {
+						//数据库
+						SiteData sd = new SiteData();
+						sd.setDataguid(pMap.get(mapKey).getDataguid());
+						sd.setDatavalue(datavalue.toString());
+						sd.setCollecttime(fileArr[1]);
+						dataList.add(sd);
+
+						//OneNet
+						List<Data> dl = new ArrayList<Data>();
+						dl.add(new Data(fileArr[1].replace(" ", "T"), datavalue.toString()));
+						onenetList.add(new Datapoints(pMap.get(mapKey).getParamname(), dl));
+						
+						//同步到OneNet
+						Map<String, List<Datapoints>> onmap = new HashMap<String, List<Datapoints>>();
+						onmap.put("datastreams", onenetList);
+						
+						AddDatapointsApi api = new AddDatapointsApi(onmap, null, null, pMap.get(mapKey).getDevicenumber(), pMap.get(mapKey).getRmk1());
+						BasicResponse<Void> response = api.executeApi();
+						Logger.getLogger("").info("errno:"+response.errno+" error:"+response.error);
+					}
+				}
+			}
+		}
+		
+	}
+	
+	
+	/**  
+     * 每个整点执行一次  ,卫星云图图片信息
+     * 将卫星云图图片信息同步到数据库
+	 * @throws UnknownHostException 
+	 * @throws NullPointerException 
+	 * @throws MalformedObjectNameException 
+     */    
+	//@Scheduled(cron = "0 0 * * * ?")
+	public void synchronizeWxytPic() {
+		Logger.getLogger("").info("-----------卫星云图图片信息同步开始-------------");
+		long begin = System.currentTimeMillis();
+		
+		//获取ServletContext对象
+		ServletContext context = ContextLoader.getCurrentWebApplicationContext().getServletContext();
+		//服务器图片物理路径
+		String filePath = context.getRealPath("/upload/FY2EPic/Demo1/bin/Debug/pic");
+		//服务器图片web路径
+		String realpath = "http://121.196.198.37:8080" + context.getContextPath() + "/upload/FY2EPic/Demo1/bin/Debug/pic";
+		
+		/*//服务器图片物理路径
+		String filePath = request.getSession().getServletContext().getRealPath("/upload/FY2EPic/Demo1/bin/Debug/pic");
+		//服务器图片web路径
+		String realpath = request.getScheme()+"://"+request.getServerName()+":"+request.getServerPort()+request.getContextPath() + "/upload/FY2EPic/Demo1/bin/Debug/pic";*/
+		
+		File dirs = new File(filePath);
+		if (!dirs.exists()) {//判断路径是否存在,不存在则创建
+            dirs.mkdirs();
+        }
+		
+		//获取目录列表
+		String[] dirnames = dirs.list();
+		//查询所有卫星云图站点
+		List<String> objids = siteDataDao.getObjidByOtid(13);
+		
+		if (dirnames != null) {
+			for (String objid : objids) {
+				List<String> dirList = new ArrayList<String>();
+				List<String> fileList = new ArrayList<String>();
+				//查询子表最大时间
+				String maxtime4dir = siteDataService.getsubStoreMaxtime(objid, "13020001","yyyyMMdd");
+				//查询子表最大时间
+				String maxtime4file = siteDataService.getsubStoreMaxtime(objid, "13020001","yyyy-MM-dd HH24:MI:ss");
+				for (int i = 0; i < dirnames.length; i++) {
+					//获取大于等于数据库中图片信息时间的目录
+					if (dirnames[i].compareTo(maxtime4dir) >= 0) {
+						dirList.add(dirnames[i]);
+					}
+				}
+				for (String dir : dirList) {
+					File files = new File(filePath + "/" + dir);
+					String[] fileArr = files.list();
+					for (int i = 0; i < fileArr.length; i++) {
+						//获取大于数据库中图片信息时间的文件
+						if (fileArr[i].compareTo(maxtime4file) > 0) {
+							fileList.add(dir + "/" + fileArr[i]);
+						}
+					}
+				}
+				
+				int resultNum = 0;
+				if (fileList.size() > 0) {
+					resultNum += addWxytPic(realpath, fileList, objid);
+				}
+				
+				if (resultNum > 0) {
+					long end = System.currentTimeMillis();
+					Logger.getLogger("").info("卫星云图图片信息同步结束，共耗时：[" + (end - begin)/1000 + "]秒");
+				} else {
+					Logger.getLogger("").info("---卫星云图图片信息已是最新数据---");
+				}
+				
+			}	
+		} else {
+			Logger.getLogger("").info("---暂无最新数据---");
+		}
+
+	}
+
+
+	/**
+     * 封装卫星云图图片信息
+     * @param realpath 图片web路径
+     * @param fileList 文件名列表：目录/文件名
+     * @param objid 对象id
+     * @return int 成功条数
+     */
+	private int addWxytPic(String realpath, List<String> fileList, String objid) {
+		
+		int resultNum = 0;
+		String fieldId = "13020001,13020002,13020003";
+		
+		List<AttachSubinfoStore> paramList = new ArrayList<AttachSubinfoStore>();
+		Date s2d = new Date();
+		String d2s = "";
+		String filetime = "";
+		String filename = "";
+		String filepath = "";
+		for (String file : fileList) {
+			String valueid = baseaddDao.selectMaxValueid(Integer.valueOf(objid));//子表中valueid
+			try {
+				s2d = DatapointsApiThreadUtil.stringToDate("yyyyMMddHHmm", file.split("/")[1].split("_")[0]);
+				d2s = DatapointsApiThreadUtil.dateToString("yyyy-MM-dd HH:mm:ss", s2d);
+				
+				filetime = d2s;
+				filename = file.split("/")[1];
+				filepath = realpath + "/" + file;
+				
+				AttachSubinfoStore attachSubinfoStore = new AttachSubinfoStore();
+				attachSubinfoStore.setObjid(Integer.valueOf(objid));
+				attachSubinfoStore.setFieldid(Long.valueOf(fieldId.split(",")[0]));
+				attachSubinfoStore.setFieldvalue(filetime);
+				attachSubinfoStore.setValueid(valueid);
+				paramList.add(attachSubinfoStore);
+				
+				AttachSubinfoStore attachSubinfoStore1 = new AttachSubinfoStore();
+				attachSubinfoStore1.setObjid(Integer.valueOf(objid));
+				attachSubinfoStore1.setFieldid(Long.valueOf(fieldId.split(",")[1]));
+				attachSubinfoStore1.setFieldvalue(filename);
+				attachSubinfoStore1.setValueid(valueid);
+				paramList.add(attachSubinfoStore1);
+				
+				AttachSubinfoStore attachSubinfoStore2 = new AttachSubinfoStore();
+				attachSubinfoStore2.setObjid(Integer.valueOf(objid));
+				attachSubinfoStore2.setFieldid(Long.valueOf(fieldId.split(",")[2]));
+				attachSubinfoStore2.setFieldvalue(filepath);
+				attachSubinfoStore2.setValueid(valueid);
+				paramList.add(attachSubinfoStore2);
+				
+				resultNum += baseaddDao.addDataToCpAttachSubinfoStore(paramList);
+				paramList.clear();
+				
+			} catch (Exception e) {
+				Logger.getLogger("").info("---日期格式解析异常---");
+			}
+		}
+		
+		return resultNum;
+	}
+	
+	/**  
+     * 每个整点执行一次 
+     * 远程调用Linux的NCL服务生成空间差值图片
+     * 并保存到服务器指定目录下
+     */    
+	//@Scheduled(cron = "0 0 * * * ?")
+    public void synncl(){
+    	
+    	Logger.getLogger("").info("-----------远程调用Linux的NCL服务生成空间差值图片同步开始-------------");
+		long begin = System.currentTimeMillis();
+		
+		//获取所有站点坐标(空间表)
+		String space_table = "space_site union select objid,id,st_AsText(shape) shape from space_countrysite";
+		List<SpaceInfo> siteGeomList = baseService.getGeomList(space_table, "");
+		Map<Integer, String> siteGeomMap = new LinkedHashMap<Integer, String>();
+		if (siteGeomList.size() > 0) {
+			for (SpaceInfo spaceInfo : siteGeomList) {
+				siteGeomMap.put(spaceInfo.getObjid(), spaceInfo.getShape());
+			}
+		}
+		
+		Map<String, Object> paramMap = new HashMap<String, Object>();
+		paramMap.put("city", CITY);
+		paramMap.put("recently", "1 second");
+		paramMap.put("dateformat", "yyyy-mm-dd HH24:MI:SS");
+		paramMap.put("objtypeid", "1,5");
+		paramMap.put("sitenumberid", "1010001,5010001");
+		
+		//各个站点最新的监测数据
+		List<KqzlColl> siteList = oneMapDao.getOmAllSiteDatas(paramMap);
+		
+		//ncldata.txt文件数据封装
+		List<String> aqiList = new ArrayList<String>();
+			aqiList.add(OperatLinuxNcl.geom);
+			aqiList.add(OperatLinuxNcl.thrAQI);
+			aqiList.add(OperatLinuxNcl.rgbPUB);
+		List<String> pm25List = new ArrayList<String>();
+			pm25List.add(OperatLinuxNcl.geom);
+			pm25List.add(OperatLinuxNcl.thrPM25);
+			pm25List.add(OperatLinuxNcl.rgbPUB);
+		List<String> pm10List = new ArrayList<String>();
+			pm10List.add(OperatLinuxNcl.geom);
+			pm10List.add(OperatLinuxNcl.thrPM10);
+			pm10List.add(OperatLinuxNcl.rgbPUB);
+		List<String> coList = new ArrayList<String>();
+			coList.add(OperatLinuxNcl.geom);
+			coList.add(OperatLinuxNcl.thrCO);
+			coList.add(OperatLinuxNcl.rgbPUB);
+		List<String> no2List = new ArrayList<String>();
+			no2List.add(OperatLinuxNcl.geom);
+			no2List.add(OperatLinuxNcl.thrNO2);
+			no2List.add(OperatLinuxNcl.rgbPUB);
+		List<String> so2List = new ArrayList<String>();
+			so2List.add(OperatLinuxNcl.geom);
+			so2List.add(OperatLinuxNcl.thrSO2);
+			so2List.add(OperatLinuxNcl.rgbSO2);
+		List<String> o3List = new ArrayList<String>();
+			o3List.add(OperatLinuxNcl.geom);
+			o3List.add(OperatLinuxNcl.thrO3);
+			o3List.add(OperatLinuxNcl.rgbPUB);
+		List<String> o38List = new ArrayList<String>();
+			o38List.add(OperatLinuxNcl.geom);
+			o38List.add(OperatLinuxNcl.thrO38);
+			o38List.add(OperatLinuxNcl.rgbO38);
+		
+		if (siteList.size() > 0) {
+			for (int i = 0; i < siteList.size(); i++) {
+				KqzlColl site = siteList.get(i);
+				int geoMapKey = site.getObjid();
+				
+				if (siteGeomMap.containsKey(geoMapKey)) {
+					String[] geoms = siteGeomMap.get(geoMapKey).replace("POINT(", "").replace(")", "").split(" ");
+					if ("-".equals(site.getAqi())) {
+						site.setAqi("0");
+					}
+					if ("-".equals(site.getPm25())) {
+						site.setPm25("0");
+					}
+					if ("-".equals(site.getPm10())) {
+						site.setPm10("0");
+					}
+					if ("-".equals(site.getCo())) {
+						site.setCo("0");
+					}
+					if ("-".equals(site.getNo2())) {
+						site.setNo2("0");
+					}
+					if ("-".equals(site.getSo2())) {
+						site.setSo2("0");
+					}
+					if ("-".equals(site.getO3())) {
+						site.setO3("0");
+					}
+					if ("-".equals(site.getO38())) {
+						site.setO38("0");
+					}
+					aqiList.add(geoms[1] +" "+ geoms[0] + " "+ site.getAqi());
+					pm25List.add(geoms[1] +" "+ geoms[0] + " "+ site.getPm25());
+					pm10List.add(geoms[1] +" "+ geoms[0] + " "+ site.getPm10());
+					coList.add(geoms[1] +" "+ geoms[0] + " "+ site.getCo());
+					no2List.add(geoms[1] +" "+ geoms[0] + " "+ site.getNo2());
+					so2List.add(geoms[1] +" "+ geoms[0] + " "+ site.getSo2());
+					o3List.add(geoms[1] +" "+ geoms[0] + " "+ site.getO3());
+					o38List.add(geoms[1] +" "+ geoms[0] + " "+ site.getO38());
+				}
+			}
+		}
+		
+		//获取ServletContext对象
+		ServletContext context = ContextLoader.getCurrentWebApplicationContext().getServletContext();
+		//服务器图片物理路径
+		String filePath = context.getRealPath("/upload/nclpng")+"/";
+		
+		//开始远程调用Linux的NCL服务生成空间差值图片,并保存到服务器指定目录下
+		boolean result = operLinNcl(aqiList,filePath,"aqi");
+		if (result) {
+			result = operLinNcl(pm25List,filePath,"pm25");
+			if (result) {
+				result = operLinNcl(pm10List,filePath,"pm10");
+				if (result) {
+					result = operLinNcl(coList,filePath,"co");
+					if (result) {
+						result = operLinNcl(no2List,filePath,"no2");
+						if (result) {
+							result = operLinNcl(so2List,filePath,"so2");
+							if (result) {
+								result = operLinNcl(o3List,filePath,"o3");
+								if (result) {
+									result = operLinNcl(o38List,filePath,"o38");
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		if (result) {
+			long end = System.currentTimeMillis();
+			Logger.getLogger("").info("远程调用Linux的NCL服务生成空间差值图片同步结束，共耗时：[" + (end - begin)/1000 + "]秒");
+		} else {
+			Logger.getLogger("").info("---远程调用Linux的NCL服务生成空间差值图片失败---");
+			//synncl();
+		}
+    }
+	
+	
+	
+	/**
+	 * 开始远程调用Linux的NCL服务生成空间差值图片
+	 * @param dataList	要写入文件的内容
+	 * @param filePath	文件父目录绝对路径
+	 * @param newname	新文件名
+	 * @return 成功true失败false
+	 */
+	private boolean operLinNcl(List<String> dataList, String filePath, String newname){
+    	
+		//1 生成空气质量TXT文本文件,文件名(ncldata.txt)
+		/*说明：dataList
+		数据均用空格分割
+		第一行：最小纬度，最小经度，最大纬度，最大经度，纬度方向插值网格数，经度方向插值网格数
+		第二行：阈值
+		第三行：RGB数值
+		第四行开始：纬度 经度 数值*/
+
+		//创建文件并写入内容
+		boolean dflag = OperatFile.writeListToFile(filePath+"ncldata.txt", dataList);
+		
+		//登录Linux
+		boolean lflag = OperatLinux.login(OperatLinuxNcl.ip, OperatLinuxNcl.port, OperatLinuxNcl.user, OperatLinuxNcl.password);
+		boolean pflag = false;//将TXT文本文件上传至Linux服务器状态标志
+		boolean gflag = false;//将生成的图片下载到本地服务器状态标志
+		
+		if (lflag) {
+			if (dflag) {
+				//将TXT文本文件上传至Linux服务器
+				pflag = OperatLinux.scpPut(filePath+"ncldata.txt", "/home/nclpng");
+			}
+			
+			if (pflag) {
+				
+				//2 调用NCL服务生成图片ncldata.png
+				String str = OperatLinux.execute("ncl /home/nclpng/draw.ncl");
+				if ("true".equals(str)) {//如果图片生成完毕
+					//获取生成的图片,并下载到本地服务器
+					gflag = OperatLinux.scpGet("/home/nclpng/ncldata.png", filePath);
+				}
+			}
+		}
+		
+		//关闭连接
+		OperatLinux.closeConnect();
+		
+		//将从Linux上获取到的图片重命名
+		boolean rflag = false;
+		if (gflag) {
+			rflag = OperatFile.renameFileName(filePath, "ncldata.png", newname+".png");
+		}
+		
+		return rflag;
+	}
+	
+}

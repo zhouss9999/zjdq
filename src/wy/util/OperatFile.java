@@ -1,0 +1,135 @@
+package wy.util;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.List;
+
+import org.apache.log4j.Logger;
+
+public class OperatFile {
+	
+	
+	/**
+	 * 创建文件,并向文件中写入内容
+	 * @param 	file_pathNameType	文件路径_文件名字_文件类型
+	 * @param	filecontent			文件内容列表
+	 * @return	成功返回true,失败false
+	 */
+	public static boolean writeListToFile(String file_pathNameType, List<String> filecontent) {
+		
+		boolean flag = false;
+		File file = new File(file_pathNameType);
+		try {
+			//如果文件不存在,则创建新文件
+			if (!file.exists()) {
+				//如果父目录不存在,则创建父目录
+				if (!file.getParentFile().exists()) {
+					file.getParentFile().mkdirs();
+				}
+				file.createNewFile();
+				flag = writeFileContent(file_pathNameType, filecontent);
+			} else {
+				flag = writeFileContent(file_pathNameType, filecontent);
+			}
+		} catch (Exception e) {
+			Logger.getLogger("").info("创建文件失败...");
+		}
+		
+		return flag;
+	} 
+	
+	
+	/**
+	 * 向文件中写入内容
+	 * @param file_pathNameType	文件路径_文件名字_文件类型
+	 * @param filecontent		文件内容列表
+	 * @return
+	 */
+	public static boolean writeFileContent(String file_pathNameType, List<String> filecontent){
+		
+		boolean flag = false;
+		
+		File file = new File(file_pathNameType);
+		
+		FileWriter fw = null;
+		BufferedWriter  bw = null;
+		
+		try {
+			//如果FileOutputStream的构造参数为true，那么就进行内容追加;
+			//如果FileOutputStream的构造参数为false,那么就进行内容的覆盖;
+			fw = new FileWriter(file, false);
+			bw = new BufferedWriter (fw);
+			for (int i = 0, size = filecontent.size(); i < size; i++) {
+				
+				String str = filecontent.get(i);
+				if (i != size - 1) {
+					str += "\r\n";// +换行
+				}
+				
+				bw.write(str);
+				bw.flush();
+			}
+			
+			flag = true;
+		} catch (IOException e) {
+			Logger.getLogger("").info("内容写入文件异常...");
+		} finally {
+			try{
+				if (bw != null) {
+					bw.close();
+				}
+				if (fw != null) {
+					fw.close();
+				}
+			} catch (IOException e) {
+				Logger.getLogger("").info("文件流关闭异常...");
+			}
+		}
+		
+		return flag;
+	}
+	
+ 
+	/**
+	 * 删除指定文件
+	 * @param file_pathNameType
+	 * @return
+	 */
+	public static boolean delFiles(String file_pathNameType){
+		boolean flag = false;
+		File file = new File(file_pathNameType);
+		if (file.exists()) {
+			flag = file.delete();
+		} else {
+			flag = true;
+		}
+		
+		return flag;
+	}
+
+	
+	/**
+	 * 修改文件名称
+	 * @param path		文件绝对路径父目录
+	 * @param oldname	老文件名
+	 * @param newname	新文件名
+	 * @return 成功true失败false
+	 */
+	public static boolean renameFileName (String path, String oldname, String newname) {
+		
+		boolean flag = false;
+		//如果文件夹已存在同名文件,则删掉旧文件
+		flag = delFiles(path+newname);
+		
+		if (flag) {
+			File file=new File(path + oldname); //指定文件名及路径
+			if (file.exists() && file.isFile()) {
+				flag = file.renameTo(new File(path+newname));
+			}
+		}
+		
+		return flag;
+	}
+}

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.impExcelData.mapping.impexcelMapper">
+	<!-- //===================================基础数据模块================================================================== -->
+	<!-- cp_info_obj添加数据 -->
+	<insert id="addExcelDatasForObj" keyProperty="objid" useGeneratedKeys="true" parameterType="wy.qingdao_atmosphere.impExcelData.domain.InfoObj">  
+    	insert into cp_info_obj(objid,objtypeid,objname,objnum,remark,isused)  values(nextval('cp_info_obj_id_seq'),#{objtypeid},#{objname},'','',1)  
+	</insert> 
+	
+	<!-- cp_info_obj更新数据 -->
+	<update id="updateExcelDatasForObj" parameterType="wy.qingdao_atmosphere.impExcelData.domain.InfoObj">  
+    	update cp_info_obj set objname = #{objname} where objid = #{objid}  
+	</update> 
+	
+	<!-- cp_attachinfo_store添加数据 -->
+	<insert id="addExcelDatasForAttach" parameterType="java.util.List" useGeneratedKeys="true">
+		<!-- <selectKey resultType="long" keyProperty="id" order="AFTER">
+			SELECT nextval("cp_info_obj_id_seq")
+		</selectKey> -->
+		insert into cp_attach_infostore(infoid,objid,fieldid,fieldvalue)
+		values
+		<foreach collection="list" item="item" index="index"
+			separator=",">
+			(nextval('cp_attach_infostore_id_seq'),#{item.objid},#{item.fieldid},#{item.fieldvalue})
+		</foreach>
+	</insert>
+	
+	<!-- cp_attachinfo_store更新数据 -->
+	<update id="updateExcelDatasForAttach" parameterType="java.util.List">
+		<foreach collection="list" item="item" index="index" separator=";">
+			update cp_attach_infostore
+			set fieldvalue = #{item.fieldvalue} where objid = #{item.objid} and fieldid = #{item.fieldid}
+		</foreach>
+	</update>
+
+	<!-- 添加spance数据 -->
+	<insert id="addDatasForSpace" parameterType="map">  
+    	insert into ${spacename} (objid,id,shape)  values(#{objid},#{objid},ST_GeomFromText('POINT(${jwd})', 4326 ))  
+	</insert> 
+	
+	<!-- 更新spance数据 -->
+	<update id="updateDatasForSpace" parameterType="map">
+    	update  ${spacename} set shape = ST_GeomFromText('POINT(${jwd})', 4326 ) where objid = #{objid}
+	</update>
+	
+	<!-- 根据objid查询空间数据是否存在 -->
+	<select id="countSpaceDataByObjid" parameterType="map" resultType="int">
+		select objid from ${spacename} where objid = #{objid}
+	</select>
+	
+	<!-- 根据对象名称获取objid -->
+	<select id="getObjidByObjnameAndObjtypeid" parameterType="map" resultType="int">  
+    	select objid from cp_info_obj where objname = #{objname} and objtypeid=${objtypeid} 
+	</select> 
+	
+	<!-- 传输对象类型id查询基本表字段信息 -->
+	<select id="selectFieldinfoByObjtypeid" parameterType="string" resultType="string">
+		select a.fieldshowname||'&amp;'||a.fieldid as fieldinfo from cp_config_tableinfo a,cp_config_tableinfoadd b where a.tableid = b.tableid and b.objtypeid = ${_parameter} and b.tableid = (#{_parameter}||'01')::numeric
+		order by a.fieldid
+	</select>
+	
+	<!-- 传输对象类型id查询基础信息数据 -->
+	<select id="selectBasicDataByObjtypeid" parameterType="map" resultType="wy.qingdao_atmosphere.impExcelData.domain.ModelAssist">
+		select x.objid,x.objname,x.fieldid,COALESCE(trim(y.fieldvalue),'/') fieldvalue,rtrim((replace(replace(replace(COALESCE(st_AsText(z.shape),'/'),'POINT(',''),'LINESTRING(',''),'POLYGON(','')),')') locations from
+		(
+		select a.objid,a.objname,c.fieldid from cp_info_obj a,cp_config_tableinfoadd b,cp_config_tableinfo c
+		where a.objtypeid = b.objtypeid and b.tableid = c.tableid and c.tableid = (${objtypeid}||'01')::numeric and b.objtypeid = ${objtypeid} 
+		<if test="objid != null and objid != ''">
+		and a.objid in (${objid})
+		</if>
+		)x left join
+		(
+		select a.objid,a.fieldid,a.fieldvalue from cp_attach_infostore a,cp_info_obj b where a.objid = b.objid and b.objtypeid = ${objtypeid}
+		<if test="objid != null and objid != ''">
+		and b.objid in (${objid})
+		</if>
+		)y on x.objid = y.objid and x.fieldid = y.fieldid left join
+		(
+		select objid,shape from ${spacename}
+		<if test="objid != null and objid != ''">
+		where objid in (${objid})
+		</if>
+		)z on y.objid = z.objid
+		order by x.objid,x.fieldid
+	</select>
+	
+	<!-- //===================================监测数据模块================================================================== -->
+	<!-- cp_collect_actual添加数据 -->
+	<insert id="addExcelDatasForActual" parameterType="map">  
+    	insert into cp_collect_actual(dataid,dataguid,datavalue,collecttime)  values(nextval('cp_collect_actual_id_seq'),#{dataguid},#{datavalue},'${collecttime}')  
+	</insert>
+	
+	<!-- cp_collect_actual更新数据 -->
+	<insert id="updateExcelDatasForActual" parameterType="map">  
+    	update cp_collect_actual set datavalue = #{datavalue} where dataguid = #{dataguid} and collecttime = '${collecttime}'
+	</insert>
+	
+	<!-- 传输对象类型id查询对象监测数据参数信息 -->
+	<select id="selectParaminfoByObjtypeid" parameterType="map" resultType="wy.qingdao_atmosphere.impExcelData.domain.MonitorDataExcelTitle">
+		select data.paramid,data.paramname||'('||data.dataunit||')'||'&amp;'||data.devicenumber||'_'||data.paramid||'&amp;'||data.datatype paramkey from
+		(
+		select distinct a.devicenumber,a.paramid,b.paramname,b.datatype,b.dataunit from cp_connect_objparam a,cp_info_param b 
+		where a.paramid = b.paramid and a.dataguid like #{objtypeid}||'_%_%_%' 
+		<if test="paramid != null and paramid != ''">
+			and b.paramid in (${paramid})
+		</if>
+		order by a.paramid
+		)data
+	</select>
+	
+	<!-- 查询监测数据 -->
+	<select id="selectMonitorData" parameterType="map" resultType="wy.qingdao_atmosphere.impExcelData.domain.MonitorDataAssist">
+		select distinct a.objid,a.objname,b.paramid,d.paramname,d.dataunit,c.datavalue,to_char(c.collecttime,'yyyy-mm-dd HH24:MI:SS') collecttime
+		from cp_info_obj a ,cp_connect_objparam b ,cp_collect_actual c ,cp_info_param d
+		where a.objid = b.objid and b.dataguid = c.dataguid and b.paramid = d.paramid
+		<if test="objtypeid != null and objtypeid != ''">
+		and a.objtypeid = ${objtypeid} 
+		</if>
+		<if test = "objid != null and objid != ''">
+		and a.objid in (${objid})
+		</if>
+		<if test="devicenumber != null and devicenumber != ''">
+		and b.devicenumber = #{devicenumber}
+		</if>
+		<if test = "paramid != null and paramid != ''">
+		and b.paramid in (${paramid})
+		</if>
+		<if test="begintime != null and begintime != ''">
+		and c.collecttime &gt;= '${begintime}'
+		</if>
+		<if test="endtime != null and endtime != ''">
+		and c.collecttime &lt;= '${endtime}'
+		</if>
+		order by a.objid,collecttime desc,b.paramid
+	</select>
+	
+	<!-- 根据objid获取对象名称及objid -->
+	<select id="selectObjnameAndObjid" parameterType="map" resultType="string">
+		select objname||'&amp;'||objid from cp_info_obj where 1 = 1
+		<if test="objtypeid != null and objtypeid != ''">
+		and objtypeid = ${objtypeid}
+		</if>
+		<if test="objid != null and objid != ''">
+		and objid in (${objid})
+		</if>
+	</select>
+	
+	<!-- 根据dataguid和监测时间查询实时数据表有无数据 -->
+	<select id="countActualDataByDataguidAndCollecttime" parameterType="map" resultType="int">
+		<if test="dataguid != null and dataguid != '' and collecttime != null and collecttime != ''">
+		select count(*) from cp_collect_actual where dataguid = #{dataguid} and collecttime = '${collecttime}'
+		</if>
+	</select>
+</mapper>

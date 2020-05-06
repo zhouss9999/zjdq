@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project-module
+  type="WEB"
+  name="qingdao_atmosphere"
+  id="myeclipse.1491879462071"
+  context-root="/qingdao_atmosphere"
+  j2ee-spec="5.0"
+  archive="qingdao_atmosphere.war">
+  <attributes>
+    <attribute name="webrootdir" value="WebRoot" />
+  </attributes>
+</project-module>
+

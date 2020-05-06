@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.onemap.mapping.Kqzlmapper">
+
+	<!-- 获取国站空气质量数据 -->
+	<select id="getOmGzSiteForKqzl" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.KqzlColl">
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据 -->
+		<if test="recently != null and recently != ''">
+			with x as (
+		</if>
+		<!-- dateformat格式说明：'yyyy-mm-dd HH24:MI:SS' 或 'yyyy-mm-dd',必传 -->
+		select sto.*,to_char(act.collecttime,#{dateformat}) collecttime,
+	       act.aqi,act.pm25,act.pm10,act.co,act.no2,act.so2,act.o3,act.pollutant,act.quality
+		from
+			(select objid,
+				max(case fieldid when '5010001' then fieldvalue else '-' end) as sitenumber,
+				max(case fieldid when '5010002' then fieldvalue else '-' end) as sitetype,
+				max(case fieldid when '5010003' then fieldvalue else '-' end) as sitename,
+				max(case fieldid when '5010004' then fieldvalue else '-' end) as monitortype,
+				max(case fieldid when '5010005' then fieldvalue else '-' end) as province,
+				max(case fieldid when '5010006' then fieldvalue else '-' end) as city,
+				max(case fieldid when '5010007' then fieldvalue else '-' end) as county,
+				max(case fieldid when '5010008' then fieldvalue else '-' end) as address,
+				max(case fieldid when '5010009' then fieldvalue else '-' end) as lon,
+				max(case fieldid when '5010010' then fieldvalue else '-' end) as lat,
+				max(case fieldid when '5010011' then fieldvalue else '-' end) as device
+			from (
+				select b.fieldname,a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue from 
+				cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+				where a.fieldid = b.fieldid
+				and b.tableid = c.tableid and c.objtypeid = 5
+				<if test="objid != null and objid != ''">
+					and a.objid in (${objid})
+				</if>
+				order by objid desc,fieldid
+			) attach
+			group by objid) sto
+		inner join
+			(select objid,collecttime,
+				<!-- 动态传入sitename和sitenumber的fieldid,必传 -->
+			    max(case fieldid when ${sitenameid} then fieldvalue else '-' end) as sitename,
+			    max(case fieldid when ${sitenumberid} then fieldvalue else '-' end) as sitenumber,
+			    max( case paramid when '1' then datavalue else '0.0' end ) as aqi,
+			    max( case paramid when '2' then datavalue else '0.0' end ) as pm25,
+			    max( case paramid when '3' then datavalue else '0.0' end ) as pm10,
+			    max( case paramid when '4' then datavalue else '0.0' end ) as co,
+			    max( case paramid when '5' then datavalue else '0.0' end ) as no2,
+			    max( case paramid when '6' then datavalue else '0.0' end ) as so2,
+			    max( case paramid when '7' then datavalue else '0.0' end ) as o3,
+			    max( case paramid when '8' then datavalue else '-' end ) as pollutant,
+			    max( case paramid when '9' then datavalue else '-' end ) as quality
+			from (
+				select obj.objid,conn.paramid,param.paramname,datas.datavalue,
+				info.fieldid,info.fieldvalue,datas.collecttime
+				from cp_info_obj obj,cp_connect_objparam conn,cp_info_param param,
+				cp_collect_actual datas,cp_attach_infostore info
+				where obj.objid = conn.objid 
+				and conn.paramid = param.paramid 
+				and conn.dataguid = datas.dataguid
+				and obj.objid = info.objid
+				<!-- 动态传入objtypeid,必传int类型 -->
+				and obj.objtypeid = #{objtypeid}
+				
+				<if test="begintime != null and begintime != ''">
+					and datas.collecttime &gt;= #{begintime}
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and datas.collecttime &lt;= #{endtime}
+				</if>
+			) coll
+			group by objid,collecttime) act
+			on sto.sitenumber = act.sitenumber
+		order by collecttime desc
+		
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据
+			recently写法：必须有单引号,类型：String ,值：'整数 year'/month/day/hour/minute/second -->
+		<if test="recently != null and recently != ''">
+			)select x.* from (select objid,max(collecttime) collecttime from x group by objid) y inner join x
+			on y.objid = x.objid and x.collecttime::timestamp &gt;= (y.collecttime::timestamp - interval ${recently}) 
+			order by objid,x.collecttime desc
+		</if>
+	</select>
+	
+	
+	
+	
+</mapper>

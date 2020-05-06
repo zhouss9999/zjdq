@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.onemap.mapping.OneMapmapper">
+
+	<!-- 一张图-获取对象基本信息列表 -->
+	<select id="getOmObjInfoList" parameterType="map" resultType="wy.util.datapersistence.ModelAssist">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from 
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		and b.tableid = c.tableid and c.objtypeid in (${objtypeid})
+		
+		<!-- 通过城市获取站点 -->
+		<if test="city != null and city != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid in (${cityfieldid}) and ltrim(rtrim(fieldvalue)) in (${city}))
+			) 
+		</if> 
+		<!-- 通过监测类型获取站点 -->
+		<if test="monitortype != null and monitortype != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid = ${mtypefieldid} and ltrim(rtrim(fieldvalue)) in (${monitortype}))
+			) 
+		</if> 
+		
+		<!-- 通过objid获取站点 -->
+		<if test="objid != null and objid != ''">
+			and a.objid in(${objid}) 
+		</if> 
+		
+		order by objid desc,fieldid
+	</select>
+
+	<!-- 一张图-获取目录列表 -->
+	<select id="getOmMenuList" resultType="wy.qingdao_atmosphere.onemap.domain.OmMenu">
+		select id,dirname,dirlevel,higherlevelid as parentid from cp_dir_control where isused != '0'
+	</select>
+	
+	<!-- 通过objid和devicetypeid查询设备编号和设备秘钥 -->
+	<select id="getDevidKey" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis">
+		select distinct obp.objid,dev.devicetypeid,dev.devicenumber, dev.rmk1
+		from cp_info_device dev inner join cp_connect_objparam obp 
+			on obp.devicenumber = dev.devicenumber
+			and obp.isused = 1 and dev.isused = 1
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and dev.devicetypeid in (${devicetypeid})
+			</if>
+			<if test="objid != null and objid != '' ">
+				and obp.objid in (${objid})
+			</if>
+		order by obp.objid
+	</select>
+	
+</mapper>

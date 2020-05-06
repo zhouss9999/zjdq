@@ -1,0 +1,630 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.onemap.mapping.Kqzlmapper">
+	
+	<!-- 获取站点空气质量实时、日监测数据 : 国站+微站  -->
+	<select id="getOmAllSiteDatas" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.KqzlColl">
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据 -->
+		<if test="recently != null and recently != ''">
+			with x as (
+		</if>
+		
+       	<!-- 引入SQL片段 -->
+       	<include refid="selectOmAllSiteDatas" />
+       	
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据
+			recently写法：必须有单引号,类型：String ,值：'整数 year'/month/day/hour/minute/second -->
+		<if test="recently != null and recently != ''">
+			)select x.* from (select objid,max(collecttime) collecttime from x group by objid) y inner join x
+			on y.objid = x.objid and x.collecttime::timestamp &gt;= (y.collecttime::timestamp - interval '${recently}') 
+			order by x.objid,x.collecttime desc
+		</if>
+	</select>
+	
+	
+	<!-- 获取站点空气质量优良率及监测参数均值 : 国站+微站  -->
+	<select id="getOmAllSiteGoodRate" parameterType="map" resultType="java.util.LinkedHashMap">
+	
+		<!-- 优良率排名 -->
+		<if test="sortrate != null and sortrate != ''">
+			with z as (
+		</if>
+		
+		with y as (
+		select objid,sitenumber,sitetype,sitename,monitortype,province,
+			city,county,address,lon,lat,device,issite,
+			round(avg(aqi::numeric),0) as aqi,
+			round(avg(pm25::numeric),1) as pm25,
+			round(avg(pm10::numeric),1) as pm10,
+			round(avg(co::numeric),1) as co,
+			round(avg(no2::numeric),1) as no2,
+			round(avg(so2::numeric),1) as so2,
+			round(avg(o3::numeric),1) as o3,
+			round(avg(o38::numeric),1) as o38,
+			round(avg(voc::numeric),1) as voc,
+			count(case when quality in ('优','良') then quality end) goodday,count(objid) daysize,
+			round((count(case when quality in ('优','良') then quality end)::numeric/count(objid))*100,1) as goodrate
+		from (
+	
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据 -->
+		<if test="recently != null and recently != ''">
+			with x as (
+		</if>
+		
+       	<!-- 引入SQL片段 -->
+       	<include refid="selectOmAllSiteDatas" />
+       	
+		<!-- 获取近几年(year)/几月(month)/几天(day)/几小时(hour)/几分钟(minute)/几秒(second)的数据
+			recently写法：必须有单引号,类型：String ,值：'整数 year'/month/day/hour/minute/second -->
+		<if test="recently != null and recently != ''">
+			)select x.* from (select objid,max(collecttime) collecttime from x group by objid) y inner join x
+			on y.objid = x.objid and x.collecttime::timestamp &gt;= (y.collecttime::timestamp - interval '${recently}') 
+			order by x.objid,x.collecttime desc
+		</if>
+		
+		) good group by objid,sitenumber,sitetype,sitename,monitortype,province,
+			city,county,address,lon,lat,device,issite
+		)select * from y
+		order by objid
+		
+		<!-- 优良率排名 -->
+		<if test="sortrate != null and sortrate != ''">
+			)select DENSE_RANK() OVER (order by goodrate ${sortrate} nulls last) as rank,* from z
+			order by rank,objid
+		</if>
+	</select>
+	
+	
+	<!-- 按站点排名(实时,时,日,月) -->
+	<select id="omRankBySite" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.OmRank">
+	
+		<!-- 国控对比空气优良率 -->
+		<if test="contrast != null and contrast != ''">
+			select issite,collecttime,
+				round(avg(aqi::numeric),0) as aqi,
+				round(avg(pm25::numeric),1) as pm25,
+				round(avg(pm10::numeric),1) as pm10,
+				round(avg(co::numeric),1) as co,
+				round(avg(no2::numeric),1) as no2,
+				round(avg(so2::numeric),1) as so2,
+				round(avg(o3::numeric),1) as o3,
+				round(avg(o38::numeric),1) as o38,
+				round(avg(voc::numeric),1) as voc,
+				round((count(case when quality in ('优','良') then quality end)::numeric/count(issite))*100,1) as goodrate,
+				count(case when quality in ('优','良') then quality end) goodday,count(issite) daysize
+			from (
+			<!-- grouptf：此处传入要分组的时间格式 -->
+			select issite,to_char(collecttime::timestamp,#{grouptf}) collecttime,aqi,pm25,pm10,co,no2,so2,o3,o38,voc,
+				case when aqi::int &lt; 51 then '优' 
+				when aqi::int &gt; 50 and aqi::int &lt; 101 then '良' 
+				when aqi::int &gt; 100 and aqi::int &lt; 151 then '轻度污染'
+				when aqi::int &gt; 150 and aqi::int &lt; 201 then '中度污染' 
+				when aqi::int &gt; 200 and aqi::int &lt; 301 then '重度污染'
+				when aqi::int &gt; 300 then '重度污染' else aqi::text end as quality
+			from(
+			with g as (
+		</if>
+		
+		<!-- 站点均值 -->
+		<if test="siteavg != null and siteavg != ''">
+			with z as (
+		</if>
+		
+		<!-- 优良率非排名 -->
+		<if test="goodrates != null and goodrates != ''">
+			with y as (
+			select objid,arsiname,collecttime,count(case when quality in ('优','良') then quality end) goodday,count(objid) daysize,
+				round((count(case when quality in ('优','良') then quality end)::numeric/count(objid))*100,1) as goodrate
+			from (
+		</if>
+		
+		<!-- AQI非排名 -->
+		<if test="aqis != null and aqis != ''">
+			with x as (
+		</if>
+	
+	
+		<!-- 优良率排名 -->
+		<if test="goodrate != null and goodrate != ''">
+			with y as (
+			select objid,arsiname,collecttime,count(case when quality in ('优','良') then quality end) goodday,count(objid) daysize,
+				round((count(case when quality in ('优','良') then quality end)::numeric/count(objid))*100,1) as goodrate
+			from (
+		</if>
+		
+		<!-- AQI排名 -->
+		<if test="aqi != null and aqi != ''">
+			with x as (
+		</if>
+	
+		<!-- 引入SQL片段 -->
+		<include refid="omRankSiteDatas" />
+		
+		<!-- AQI排名 -->
+		<if test="aqi != null and aqi != ''">
+			)select DENSE_RANK() OVER (order by aqi nulls last) as rank,* from x
+			order by rank,objid
+		</if>
+		
+		<!-- 优良率排名 -->
+		<if test="goodrate != null and goodrate != ''">
+			) good group by objid,arsiname,collecttime
+			)select DENSE_RANK() OVER (order by goodrate desc nulls last) as rank,* from y
+			order by rank,objid
+		</if>
+		
+		<!-- AQI非排名 -->
+		<if test="aqis != null and aqis != ''">
+			)select * from x
+			order by objid,collecttime
+		</if>
+		
+		<!-- 优良率非排名 -->
+		<if test="goodrates != null and goodrates != ''">
+			) good group by objid,arsiname,collecttime
+			)select * from y
+			order by objid,collecttime
+		</if>
+	
+		<!-- 站点均值 -->
+		<if test="siteavg != null and siteavg != ''">
+			) select objid,arsiname,issite,collecttime,
+				round(avg(aqi::numeric),0) as aqi,
+				round(avg(pm25::numeric),1) as pm25,
+				round(avg(pm10::numeric),1) as pm10,
+				round(avg(co::numeric),1) as co,
+				round(avg(no2::numeric),1) as no2,
+				round(avg(so2::numeric),1) as so2,
+				round(avg(o3::numeric),1) as o3,
+				round(avg(o38::numeric),1) as o38,
+				round(avg(voc::numeric),1) as voc,
+				count(case when quality in ('优','良') then quality end) goodday,count(objid) daysize,
+				round((count(case when quality in ('优','良') then quality end)::numeric/count(objid))*100,1) as goodrate
+			from z
+			group by objid,arsiname,issite,collecttime
+			order by objid desc,collecttime
+		</if>
+		
+		<!-- 国控对比空气优良率 -->
+		<if test="contrast != null and contrast != ''">
+			) select issite,collecttime,
+				round(avg(aqi::numeric),0) as aqi,
+				round(avg(pm25::numeric),1) as pm25,
+				round(avg(pm10::numeric),1) as pm10,
+				round(avg(co::numeric),1) as co,
+				round(avg(no2::numeric),1) as no2,
+				round(avg(so2::numeric),1) as so2,
+				round(avg(o3::numeric),1) as o3,
+				round(avg(o38::numeric),1) as o38,
+				round(avg(voc::numeric),1) as voc
+			from g
+			group by issite,collecttime
+			) con)datas
+			group by issite,collecttime
+			order by issite,collecttime
+		</if>
+		
+	</select>
+	
+	
+	<!-- 按区域排名(实时,时,日,月) -->
+	<select id="omRankByArea" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.OmRank">
+		<!-- 单个区域查询 -->
+		<if test="area != null and area != ''">
+			with z as (
+		</if>
+		
+		<!-- 优良率非排名 -->
+		<if test="goodrates != null and goodrates != ''">
+			with y as (
+				select arsiname,collecttime,count(case when quality in ('优','良') then quality end) goodday,count(arsiname) daysize,
+				round((count(case when quality in ('优','良') then quality end)::numeric/count(arsiname))*100,1) as goodrate
+			from (
+		</if>
+		
+		<!-- 优良率排名 -->
+		<if test="goodrate != null and goodrate != ''">
+			with y as (
+				select arsiname,collecttime,count(case when quality in ('优','良') then quality end) goodday,count(arsiname) daysize,
+				round((count(case when quality in ('优','良') then quality end)::numeric/count(arsiname))*100,1) as goodrate
+			from (
+		</if>
+		
+		<!-- AQI非排名 -->
+		<if test="aqis != null and aqis != ''">
+			with x as (
+		</if>
+		
+		<!-- AQI排名 -->
+		<if test="aqi != null and aqi != ''">
+			with x as (
+		</if>
+		
+		<!-- 引入SQL片段 -->
+		<include refid="omRankAreaDatas" />
+		
+		<!-- AQI排名 -->
+		<if test="aqi != null and aqi != ''">
+			)select DENSE_RANK() OVER (order by aqi nulls last) as rank,* from x
+			order by rank,arsiname
+		</if>
+		
+		<!-- AQI非排名 -->
+		<if test="aqis != null and aqis != ''">
+			)select * from x
+			order by arsiname,collecttime
+		</if>
+		
+		<!-- 优良率排名 -->
+		<if test="goodrate != null and goodrate != ''">
+			) good group by arsiname,collecttime
+			)select DENSE_RANK() OVER (order by goodrate desc nulls last) as rank,* from y
+			order by rank,arsiname
+		</if>
+		
+		<!-- 优良率非排名 -->
+		<if test="goodrates != null and goodrates != ''">
+			) good group by arsiname,collecttime
+			)select * from y
+			order by arsiname,collecttime
+		</if>
+
+		<!-- 单个区域查询 -->
+		<if test="area != null and area != ''">
+			)select * from z where arsiname like concat(concat('%',#{area}),'%')
+			order by collecttime
+		</if>
+	</select>
+	
+	
+	<!-- SQL片段,查询国站微站空气质量基本监测参数,SQL重用
+			参数：dateformat,objtypeid,city,objid,sitenumberid
+			begintime,endtime
+	 -->
+	<sql id="selectOmAllSiteDatas">
+		<!-- dateformat格式说明：'yyyy-mm-dd HH24:MI:SS'或 'yyyy-mm-dd'或'yyyy-mm',必传 -->
+       	select sto.*,to_char(act.collecttime,#{dateformat}) collecttime,
+       	act.aqi,act.pm25,act.pm10,act.co,act.no2,act.so2,act.o3,act.o38,act.voc,act.pollutant,
+       	case act.quality when '1' then '优' when '2' then '良' when '3' then '轻度污染'
+	    when '4' then '中度污染' when '5' then '重度污染' when '6' then '严重污染' else act.quality end as quality
+		from
+			(select objid,
+				max(case when fieldid in(1010001,5010001) then fieldvalue else '-' end) as sitenumber,
+				max(case when fieldid in(1010002,5010002) then fieldvalue else '-' end) as sitetype,
+				max(case when fieldid in(1010003,5010003) then fieldvalue else '-' end) as sitename,
+				max(case when fieldid in(1010004,5010004) then fieldvalue else '-' end) as monitortype,
+				max(case when fieldid in(1010005,5010005) then fieldvalue else '-' end) as province,
+				max(case when fieldid in(1010006,5010006) then fieldvalue else '-' end) as city,
+				max(case when fieldid in(1010007,5010007) then fieldvalue else '-' end) as county,
+				max(case when fieldid in(1010008,5010008) then fieldvalue else '-' end) as address,
+				max(case when fieldid in(1010009,5010009) then fieldvalue else '-' end) as lon,
+				max(case when fieldid in(1010010,5010010) then fieldvalue else '-' end) as lat,
+				max(case when fieldid in(1010011,5010011) then fieldvalue else '-' end) as device,
+				max(case fieldid when 1010001 then '微站' when 5010001 then '国站' end) as issite 
+			from (
+				select b.fieldname,a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue from 
+				cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+				where a.fieldid = b.fieldid
+				and b.tableid = c.tableid
+				<!-- objtypeid:微站-1,国站-5 -->
+				and c.objtypeid in (${objtypeid})
+				<!-- 所属城市 -->
+				<if test="city != null and city != ''">
+					and 
+					a.objid in(
+						select objid from cp_attach_infostore where (fieldid in (1010006,5010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+					) 
+				</if>
+
+				<if test="objid != null and objid != ''">
+					and a.objid in (${objid})
+				</if>
+				
+				<!-- 通过监测类型获取站点 -->
+				<if test="monitortype != null and monitortype != ''">
+					and 
+					a.objid in(
+						select objid from cp_attach_infostore where (fieldid in (1010004,5010004) and ltrim(rtrim(fieldvalue)) in (${monitortype}))
+					) 
+				</if>
+				order by objid desc,fieldid
+			) attach
+			group by objid order by objid) sto
+		left join
+			(select objid,collecttime,
+				<!-- 动态传入sitenumber的fieldid,必传
+				sitenumberid:	实时数据:	1010001(微),5010001(国);	日数据: 2010002(微),6010002(国) -->
+			    max(case when fieldid in(${sitenumberid}) then fieldvalue else '-' end) as sitenumber,			
+			    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+			    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+			    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+			    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+			    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+			    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+			    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3,
+			    max( case when paramid in(97) then datavalue else '0.0' end ) as o38,
+			    max( case when paramid in(28) then datavalue else '0.0' end ) as voc,
+			    max( case when paramid in(8) then datavalue else '-' end ) as pollutant,
+			    max( case when paramid in(9) then datavalue else '-' end ) as quality
+			from (
+				select obj.objid,conn.paramid,datas.datavalue,
+				info.fieldid,info.fieldvalue,datas.collecttime
+				from cp_collect_actual datas,cp_connect_objparam conn,cp_info_param param,
+				cp_info_device dev,cp_attach_infostore info,cp_info_obj obj
+				where datas.dataguid = conn.dataguid
+				and conn.paramid = param.paramid
+				and conn.devicenumber = dev.devicenumber
+				and conn.objid = obj.objid
+				and info.objid = obj.objid
+				and dev.devicetypeid in (1,4)
+				and conn.paramid in (1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9)
+				
+				<!--  sitenumberid:
+				实时数据: 1010001(微),5010001(国);
+				日  数  据: 2010002(微),6010002(国) -->
+				and info.fieldid in (${sitenumberid})
+				<if test="begintime != null and begintime != ''">
+					and datas.collecttime &gt;= '${begintime}'
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and datas.collecttime &lt;= '${endtime}'
+				</if>
+			) coll
+			group by objid,collecttime) act
+			on sto.sitenumber = act.sitenumber
+		order by objid,collecttime desc
+	</sql>
+	
+	
+	<!-- 站点排名-监测数据-基本数据
+		参数：
+		dateformat,objtypeid,city
+		area,objid,contrast,sitenumberid
+		begintime,endtime
+	 -->
+	<sql id="omRankSiteDatas">
+		select sto.objid,sto.sitename as arsiname,sto.province,sto.city,sto.county,sto.issite,
+			<!-- dateformat格式说明：'yyyy-mm-dd HH24:MI:SS'或 'yyyy-mm-dd'或'yyyy-mm',必传 -->
+			to_char(act.collecttime,#{dateformat}) collecttime,
+			act.aqi,act.pm25,act.pm10,act.co,act.no2,act.so2,act.o3,act.o38,act.voc,act.pollutant,
+			case act.quality when '1' then '优' when '2' then '良' when '3' then '轻度污染'
+			when '4' then '中度污染' when '5' then '重度污染' when '6' then '严重污染' else act.quality end as quality
+		from
+			(select objid,
+				max(case when fieldid in(1010001,5010001) then fieldvalue else '-' end) as sitenumber,
+				max(case when fieldid in(1010003,5010003) then fieldvalue else '-' end) as sitename,
+				max(case when fieldid in(1010005,5010005) then fieldvalue else '-' end) as province,
+				max(case when fieldid in(1010006,5010006) then fieldvalue else '-' end) as city,
+				max(case when fieldid in(1010007,5010007) then fieldvalue else '-' end) as county,
+				max(case fieldid when 1010001 then '微站' when 5010001 then '国站' end) as issite 
+			from (
+				select b.fieldname,a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue from 
+				cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+				where a.fieldid = b.fieldid
+				and b.tableid = c.tableid 
+				<!-- objtypeid:微站-1,国站-5 -->
+				and c.objtypeid in (${objtypeid})
+				
+				<!-- 所属城市 -->
+				<if test="city != null and city != ''">
+					and a.objid in (
+						select objid from cp_attach_infostore where (fieldid in (1010006,5010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+					)
+				</if>
+				
+				<!-- 所属县市区 -->
+				<if test="area != null and area != ''">
+					and a.objid in (
+						select objid from cp_attach_infostore where (fieldid in (1010007,5010007) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{area}),'%'))
+					)
+				</if>
+				
+				<!-- 站点objid -->
+				<if test="objid != null and objid != ''">
+					and a.objid in (${objid})
+				</if>
+				
+				<!-- 国控对比 -->
+				<if test="contrast != null and contrast != ''">
+					or a.objid in (select objid2 from cp_connect_obj2obj where objid1 in(${contrast}))
+				</if>
+				
+				order by objid desc,fieldid
+			) attach
+			group by objid) sto
+			
+		left join
+		
+			(select objid,collecttime,
+				<!-- 动态传入sitename和sitenumber的fieldid,必传
+				sitenumberid:	实时数据:	1010001(微),5010001(国);	日数据: 2010002(微),6010002(国) -->
+			    max(case when fieldid in(${sitenumberid}) then fieldvalue else '-' end) as sitenumber,			
+			    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+			    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+			    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+			    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+			    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+			    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+			    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3,
+			    max( case when paramid in(97) then datavalue else '0.0' end ) as o38,
+			    max( case when paramid in(28) then datavalue else '0.0' end ) as voc,
+			    max( case when paramid in(8) then datavalue end ) as pollutant,
+			    max( case when paramid in(9) then datavalue end ) as quality
+			from (
+				select obj.objid,conn.paramid,datas.datavalue,
+				info.fieldid,info.fieldvalue,datas.collecttime
+				from cp_collect_actual datas,cp_connect_objparam conn,cp_info_param param,
+				cp_info_device dev,cp_attach_infostore info,cp_info_obj obj
+				where datas.dataguid = conn.dataguid
+				and conn.paramid = param.paramid
+				and conn.devicenumber = dev.devicenumber
+				and conn.objid = obj.objid
+				and info.objid = obj.objid
+				and dev.devicetypeid in (1,4)
+				and conn.paramid in (1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9)
+				
+				<!--  sitenumberid:
+				实时数据: 1010001(微),5010001(国);
+				日  数  据: 2010002(微),6010002(国) -->
+				and info.fieldid in (${sitenumberid})
+				<if test="begintime != null and begintime != ''">
+					and datas.collecttime &gt;= '${begintime}'
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and datas.collecttime &lt;= '${endtime}'
+				</if>
+			) coll
+			group by objid,collecttime) act
+			on sto.sitenumber = act.sitenumber
+		order by objid,collecttime
+	</sql>
+	
+	
+	<!-- 区域排名-监测数据-基本数据
+		参数：
+		dateformat,objtypeid,city
+		area,objid,contrast,sitenumberid
+		begintime,endtime
+	 -->
+	<sql id="omRankAreaDatas">
+		select info.arsiname,datab.collecttime,datab.aqi,
+			datab.pm25,datab.pm10,datab.co,datab.no2,
+			datab.so2,datab.o3,datab.o38,datab.voc,
+			case when datab.aqi::int &lt; 51 then '优' 
+			when datab.aqi::int &gt; 50 and datab.aqi::int &lt; 101 then '良' 
+			when datab.aqi::int &gt; 100 and datab.aqi::int &lt; 151 then '轻度污染'
+			when datab.aqi::int &gt; 150 and datab.aqi::int &lt; 201 then '中度污染' 
+			when datab.aqi::int &gt; 200 and datab.aqi::int &lt; 301 then '重度污染'
+			when datab.aqi::int &gt; 300 then '重度污染' else datab.aqi::text end as quality
+		from
+		<!-- 查询区域名称 -->
+		(select distinct fieldvalue as arsiname from cp_attach_infostore where fieldid in (16010001)
+			<!-- 所属城市 -->
+			<if test="city != null and city != ''">
+				and objid in (
+					select objid from cp_attach_infostore where (fieldid in (16010003) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+				)
+			</if>
+		)  info
+		
+		left join 
+		
+		(select sto.county as arsiname,
+			<!-- dateformat格式说明：'yyyy-mm-dd HH24:MI:SS'或 'yyyy-mm-dd'或'yyyy-mm',必传 -->
+			to_char(act.collecttime,#{dateformat}) collecttime,
+			round(avg(act.aqi::numeric),0) as aqi,
+			round(avg(act.pm25::numeric),1) as pm25,
+			round(avg(act.pm10::numeric),1) as pm10,
+			round(avg(act.co::numeric),1) as co,
+			round(avg(act.no2::numeric),1) as no2,
+			round(avg(act.so2::numeric),1) as so2,
+			round(avg(act.o3::numeric),1) as o3,
+			round(avg(act.o38::numeric),1) as o38,
+			round(avg(act.voc::numeric),1) as voc
+		from
+			(select objid,
+				max(case when fieldid in(1010001,5010001) then fieldvalue else '-' end) as sitenumber,
+				max(case when fieldid in(1010003,5010003) then fieldvalue else '-' end) as sitename,
+				max(case when fieldid in(1010005,5010005) then fieldvalue else '-' end) as province,
+				max(case when fieldid in(1010006,5010006) then fieldvalue else '-' end) as city,
+				max(case when fieldid in(1010007,5010007) then fieldvalue else '-' end) as county,
+				max(case fieldid when 1010001 then '微站' when 5010001 then '国站' end) as issite 
+			from (
+				select b.fieldname,a.infoid,a.objid,a.fieldid,trim(a.fieldvalue) as fieldvalue from 
+				cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+				where a.fieldid = b.fieldid
+				and b.tableid = c.tableid 
+				
+				<!-- objtypeid:微站-1,国站-5 -->
+				and c.objtypeid in (${objtypeid})
+				
+				<!-- 所属城市 -->
+				<if test="city != null and city != ''">
+					and a.objid in (
+						select objid from cp_attach_infostore where (fieldid in (1010006,5010006) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+					)
+				</if>
+				
+				order by objid desc,fieldid
+			) attach
+			group by objid) sto
+		inner join
+			(select objid,collecttime,
+				<!-- 动态传入sitename和sitenumber的fieldid,必传
+				sitenumberid:	实时数据:	1010001(微),5010001(国);	日数据: 2010002(微),6010002(国) -->
+			    max(case when fieldid in(${sitenumberid}) then fieldvalue else '-' end) as sitenumber,			
+			    max( case when paramid in(1) then datavalue else '0' end ) as aqi,
+			    max( case when paramid in(29,2) then datavalue else '0.0' end ) as pm25,
+			    max( case when paramid in(30,3) then datavalue else '0.0' end ) as pm10,
+			    max( case when paramid in(21,4) then datavalue else '0.0' end ) as co,
+			    max( case when paramid in(22,5) then datavalue else '0.0' end ) as no2,
+			    max( case when paramid in(23,6) then datavalue else '0.0' end ) as so2,
+			    max( case when paramid in(24,7) then datavalue else '0.0' end ) as o3,
+			    max( case when paramid in(97) then datavalue else '0.0' end ) as o38,
+			    max( case when paramid in(28) then datavalue else '0.0' end ) as voc
+			from (
+				select obj.objid,conn.paramid,datas.datavalue,
+				info.fieldid,info.fieldvalue,datas.collecttime
+				from cp_collect_actual datas,cp_connect_objparam conn,cp_info_param param,
+				cp_info_device dev,cp_attach_infostore info,cp_info_obj obj
+				where datas.dataguid = conn.dataguid
+				and conn.paramid = param.paramid
+				and conn.devicenumber = dev.devicenumber
+				and conn.objid = obj.objid
+				and info.objid = obj.objid
+				and dev.devicetypeid in (1,4)
+				and conn.paramid in (1,29,2,30,3,21,4,22,5,23,6,24,7,97,28,8,9)
+				
+				<!--  sitenumberid:
+				实时数据: 1010001(微),5010001(国);
+				日  数  据: 2010002(微),6010002(国) -->
+				and info.fieldid in (${sitenumberid})
+				
+				<if test="begintime != null and begintime != ''">
+					and datas.collecttime &gt;= '${begintime}'
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and datas.collecttime &lt;= '${endtime}'
+				</if>
+			) coll
+			group by objid,collecttime) act
+			on sto.sitenumber = act.sitenumber
+		group by county,collecttime
+		order by aqi) datab
+		on info.arsiname = datab.arsiname
+		order by arsiname,collecttime
+	</sql>
+	
+	<!-- 获取气象监测站实时和历史监测数据 -->
+	<select id="getWeatherJCZMonitorData" parameterType="map" resultType="wy.qingdao_atmosphere.onemap.domain.WeatherData">
+		select data.objid,data.objname,
+			max(case data.paramid when 110 then data.datavalue else '/' end) wendu,
+			max(case data.paramid when 111 then data.datavalue else '/' end) shidu,
+			max(case data.paramid when 112 then data.datavalue else '/' end) fengli,
+			max(case data.paramid when 113 then data.datavalue else '/' end) fengxiang,
+			max(case data.paramid when 114 then data.datavalue else '/' end) jiangshui,
+			max(case data.paramid when 115 then data.datavalue else '/' end) kqzl,data.collecttime from
+		(
+		select distinct a.objid,a.objname,b.paramid,d.paramname,d.dataunit,c.datavalue,to_char(c.collecttime,'yyyy-mm-dd HH24:MI:SS') collecttime
+			from cp_info_obj a ,cp_connect_objparam b ,cp_collect_actual c ,cp_info_param d
+			where a.objid = b.objid and b.dataguid = c.dataguid and b.paramid = d.paramid
+			and a.objtypeid = 19
+			<if test="objid != null and objid != ''">
+				and a.objid = ${objid}
+			</if>
+			<if test="type != '' and type == 'actual'.toString()">
+				and c.collecttime >= (select max(collecttime) -  interval '24 hours' from cp_collect_actual where dataguid like '19_${objid}_16-1_%')
+			</if>
+			and b.devicenumber = '16-1'
+			<if test="begintime != null and begintime != ''">
+				and c.collecttime &gt;= #{begintime}::timestamp
+			</if>
+			<if test="endtime != null and endtime != ''">
+				and c.collecttime &lt;= #{endtime}::timestamp
+			</if>
+			order by a.objid,collecttime desc,b.paramid
+		)data
+		group by objid,objname,collecttime
+		order by collecttime desc
+	</select>
+</mapper>

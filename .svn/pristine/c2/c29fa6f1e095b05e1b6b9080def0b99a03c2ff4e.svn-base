@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.onemap.mapping.OneMapmapper">
+
+	<!-- 一张图-获取目录列表 -->
+	<select id="getOmMenuList" resultType="wy.qingdao_atmosphere.onemap.domain.OmMenu">
+		select id,dirname,dirlevel,higherlevelid as parentid from cp_dir_control where isused != '0' order by id
+	</select>
+	
+	<!-- 一张图-获取对象基本信息列表 -->
+	<select id="getOmObjInfoList" parameterType="map" resultType="wy.util.datapersistence.ModelAssist">
+		select b.fieldname,a.infoid,a.objid,a.fieldid,COALESCE(trim(a.fieldvalue),'-') as fieldvalue from 
+		cp_attach_infostore a , cp_config_tableinfo b , cp_config_tableinfoadd c
+		where a.fieldid = b.fieldid
+		<!-- objtypeid:对象类型id,必传 -->
+		and b.tableid = c.tableid and c.objtypeid in (${objtypeid})
+		<!-- 通过关键字查询  -->
+		<if test="keyword != null and keyword != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid in (1010003,5010003) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{keyword}),'%'))
+			) 
+		</if>
+		
+		<!-- 通过城市获取站点 -->
+		<if test="city != null and city != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid in (11010007,12010004,13010004,110) and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{city}),'%'))
+			) 
+		</if> 
+
+		<!-- 通过objid获取站点 -->
+		<if test="objid != null and objid != ''">
+			and a.objid in(${objid}) 
+		</if> 
+		
+		<!-- 通过城市名称查询市区域  -->
+		<if test="cityname != null and cityname != ''">
+			and 
+			a.objid in(
+				select objid from cp_attach_infostore where (fieldid= 24010001 and ltrim(rtrim(fieldvalue)) like concat(concat('%',#{cityname}),'%'))
+			) 
+		</if>
+		
+		order by objid desc,fieldid
+	</select>
+	
+	<!-- 通过objid和devicetypeid查询设备编号和设备秘钥 -->
+	<select id="getDevidKey" parameterType="map" resultType="wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis">
+		select distinct obp.objid,dev.devicetypeid,dev.devicenumber, dev.rmk1
+		from cp_info_device dev inner join cp_connect_objparam obp 
+			on obp.devicenumber = dev.devicenumber
+			and obp.isused = 1 and dev.isused = 1
+			<if test="devicetypeid != null and devicetypeid != '' ">
+				and dev.devicetypeid in (${devicetypeid})
+			</if>
+			<if test="objid != null and objid != '' ">
+				and obp.objid in (${objid})
+			</if>
+		order by obp.objid
+	</select>
+	
+	
+	<!-- 获取图片信息列表-->
+	<select id="getPicInfoList" resultType="wy.qingdao_atmosphere.onemap.domain.PicInfo" parameterType="map">
+		with x as(
+		select objid,valueid,
+		max(case when fieldid in(13020001) then fieldvalue else '1970-01-01 00:00:00' end) as filetime,
+		max(case when fieldid in(13020002) then fieldvalue else '-' end) as filename,
+		max(case when fieldid in(13020003) then fieldvalue else '-' end) as filepath
+		from (
+			select b.fieldname,a.* from cp_attach_subinfostore a , cp_config_tableinfo b , cp_config_tableinfoadd c,
+			cp_info_obj d where a.fieldid = b.fieldid and b.tableid = c.tableid and a.objid = d.objid
+			<!-- 对象类型id 卫星云图：13-->
+			and d.objtypeid in (${objtypeid})
+			<if test="objid != null and objid != ''">
+				and a.objid in (${objid})
+			</if> 
+			and a.valueid in (select distinct valueid from cp_attach_subinfostore sub,cp_info_obj obj 
+				where sub.objid = obj.objid
+				and obj.objtypeid in (${objtypeid})
+				<if test="objid != null and objid != ''">
+					and obj.objid in (${objid})
+				</if>
+				<if test="begintime != null and begintime != ''">
+					and (fieldid in (13020001) and fieldvalue &gt;= '${begintime}')
+				</if>
+				<if test="endtime != null and endtime != ''">
+					and (fieldid in (13020001) and fieldvalue &lt;= '${endtime}')
+				</if>
+			)
+		) as info
+		group by valueid,objid)
+		<if test="yestime != null and yestime != ''">
+			select distinct filetime,filename,filepath,objid from x order by filetime
+		</if>
+		<if test="notime != null and notime != ''">
+			select distinct x.filetime,x.filename,x.filepath,x.objid from (select objid,max(filetime) filetime from x group by objid) y inner join x
+			on y.objid = x.objid and x.filetime::timestamp &gt;= (y.filetime::timestamp - interval '${notime}') 
+			order by x.filetime desc
+		</if>
+	</select>
+	
+	
+	<!-- 气象监测站获取空间数据 -->
+	<select id="getQXJCZGeomList" parameterType="map" resultType="wy.util.datapersistence.SpaceInfo">
+		select objid,id,'POINT'||replace(shape::text,',',' ') shape from ${space_tablename}
+		<where>
+			<if test="objid != null and objid != ''">
+				and objid in (${objid})
+			</if>
+		</where>
+	</select>
+	
+	
+	<!-- 微波辐射站报警查询 -->
+	<select id="getThrList" parameterType="map" resultType="java.util.LinkedHashMap">
+		select thr.thrid,thr.objid,info.fieldvalue as sitename,to_char(thr.collecttime,'yyyy-mm-dd HH24:MI:SS') as collecttime,
+		thr.thrtype,'设备状态'::text as paramname,thr.value,thr.thresholdval,thr.describe
+		from cp_info_threshold thr 
+		left join cp_attach_infostore info on thr.objid = info.objid
+		left join cp_info_obj obj on info.objid = obj.objid
+		where obj.objtypeid = 12 and info.fieldid = 12010002
+		
+		
+		<!-- 报警类型 -->
+		<if test="thrtype != null and thrtype != ''">
+			and thr.thrtype like concat(concat('%',#{thrtype}),'%')
+		</if>
+		
+		<!-- 报警时间 -->
+		<if test="begintime != null and begintime != ''">
+			and thr.collecttime &gt;= '${begintime}'
+		</if>
+		<if test="endtime != null and endtime != ''">
+			and thr.collecttime &lt;= '${endtime}'
+		</if>
+		
+		<!-- 站点名称 -->
+		<if test="sitename != null and sitename != ''">
+			and info.fieldvalue like concat(concat('%',#{sitename}),'%')
+		</if>
+		
+		<!-- 报警id -->
+		<if test="thrid != null and thrid != ''">
+			and thr.thrid in (${thrid})
+		</if>
+		
+		<!-- 对象id -->
+		<if test="objid != null and objid != ''">
+			and thr.objid in (${objid})
+		</if>
+		order by thr.collecttime desc
+	</select>
+	
+</mapper>

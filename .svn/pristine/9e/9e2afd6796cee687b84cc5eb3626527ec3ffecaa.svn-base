@@ -1,0 +1,15 @@
+package wy.qingdao_atmosphere.reportform.dao;
+
+import java.util.List;
+import java.util.Map;
+
+public interface ReportformDao {
+	//查询大气站点的设备
+	public List<Map<String, Object>> getwz(Map<String, Object> map);
+	
+	//查询实时报数据
+	public List<Map<String, Object>> queryrealData(Map<String, Object> map);
+	
+	//查询探空曲线站点
+	public List<Map<String, Object>> querytkqxobj();
+}

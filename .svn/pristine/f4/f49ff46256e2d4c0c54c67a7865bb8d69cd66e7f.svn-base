@@ -1,0 +1,38 @@
+package wy.qingdao_atmosphere.onemap.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+import wy.qingdao_atmosphere.onemap.domain.OmRank;
+import wy.qingdao_atmosphere.onemap.domain.PicInfo;
+
+public interface OneMapDao {
+	
+	//获取目录列表
+	public List<OmMenu> getOmMenuList();
+	
+	//通过objid和devicetypeid查询设备编号和设备秘钥
+	public List<ParamAssis> getDkList(Map<String, Object> map);
+	public ParamAssis getDevidKey(Map<String, Object> map);
+	
+	//获取国站空气质量数据
+	public List<KqzlColl> getOmGzSiteForKqzl(Map<String, Object> map);
+	//获取微站空气质量数据
+	public List<KqzlColl> getOmWzSiteForKqzl(Map<String, Object> map);
+	//获取国站微站站点空气质量数据
+	public List<KqzlColl> getOmAllSiteForKqzl(Map<String, Object> map);
+	//查询实时数据站点对应的日数据站点--objid为实时数据站点的objid
+	public String getDayDataObjid(String objid);
+	
+	//获取图片信息列表
+	public List<PicInfo> getPicInfoList(Map<String, Object> map);
+	
+	//按区域排名
+	public List<OmRank> omRankByArea(Map<String, Object> map);
+	//按站点排名
+	public List<OmRank> omRankBySite(Map<String, Object> map);
+	
+}

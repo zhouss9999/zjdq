@@ -1,0 +1,22 @@
+package wy.qingdao_atmosphere.onemap.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import wy.qingdao_atmosphere.countrysitedata.domain.ParamAssis;
+import wy.qingdao_atmosphere.onemap.domain.KqzlColl;
+import wy.qingdao_atmosphere.onemap.domain.OmMenu;
+
+public interface OneMapDao {
+	
+	//一张图-获取目录列表
+	public List<OmMenu> getOmMenuList();
+	
+	//通过objid和devicetypeid查询设备编号和设备秘钥
+	public List<ParamAssis> getDkList(Map<String, Object> map);
+	public ParamAssis getDevidKey(Map<String, Object> map);
+	
+	//获取国站空气质量数据
+	public List<KqzlColl> getOmGzSiteForKqzl(Map<String, Object> map);
+	
+}

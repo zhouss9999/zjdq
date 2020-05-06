@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml-body>
+name=postgres
+driver=org.postgresql.Driver
+url=jdbc\:postgresql\://121.196.198.37\:5432/qingdao_atmosphere
+username=postgres
+password=POSTGRE
+</xml-body>

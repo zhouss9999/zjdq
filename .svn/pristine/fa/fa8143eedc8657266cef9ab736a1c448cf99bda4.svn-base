@@ -1,0 +1,36 @@
+package wy.qingdao_atmosphere.mobile.dao;
+
+import java.util.List;
+import java.util.Map;
+
+import javax.annotation.Resource;
+
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.support.SqlSessionDaoSupport;
+import org.springframework.stereotype.Repository;
+
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+
+@Repository("airAppDao")
+public class AirAppDaoImpl extends SqlSessionDaoSupport implements AirAppDao {
+	
+	@Resource
+	public void setSuperSessionFactory(SqlSessionFactory sessionFactory) {
+		this.setSqlSessionFactory(sessionFactory);
+	}
+
+	//获取城市监测参数
+	public List<AirCollect> getAirSbyCity(Map<String, Object> map) {
+		return this.getSqlSession().selectList("getCollForCity",map);
+	}
+
+	//获取站点监测参数 
+	public List<AirCollect> getAirSbyObjid(Map<String, Object> map) {
+		return this.getSqlSession().selectList("getCollForSite",map);
+	}
+
+	public List<Integer> getSiteObjid(Map<String, Object> map) {
+		return this.getSqlSession().selectList("getSiteObjid", map);
+	}
+
+}

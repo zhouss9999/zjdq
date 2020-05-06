@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="wy.qingdao_atmosphere.reportfrom.mapping.Reportfrommapper">
+	<!-- 查询需要同步数据的微站 -->
+	<select id="getwz" parameterType="String" resultType="map">
+		select DISTINCT a.objid,a.objtypeid,a.objname,COALESCE(b.devicenumber,'') as devicenumber ,COALESCE(c.devicename,'') as devicename,COALESCE(c.rmk1,'') as rmk1
+		from cp_info_obj a 
+		left join cp_connect_objparam b on a.objid = b.objid and b.isused=1 
+		left join cp_info_device c on b.devicenumber = c.devicenumber
+		where c.devicetypeid = 4
+		and a.objtypeid = ${_parameter}
+	</select>
+	
+</mapper>

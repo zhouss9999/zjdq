@@ -1,0 +1,307 @@
+package wy.qingdao_atmosphere.mobile.service;
+
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import wy.qingdao_atmosphere.mobile.dao.AirAppDao;
+import wy.qingdao_atmosphere.mobile.domain.AirCollect;
+import wy.util.datapersistence.SpaceInfo;
+import wy.util.datapersistence.service.BaseService;
+
+@Service("airAppService")
+public class AirAppServiceImpl implements AirAppService {
+
+	@Autowired 
+	private BaseService baseService;
+	
+	@Autowired
+	private AirAppDao airAppDao;
+
+	
+	public List<AirCollect> getAirSbyCity(HttpServletRequest request) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "青岛市" : request.getParameter("city");
+		
+		List<AirCollect> list = new ArrayList<AirCollect>();
+		Map<String, Object> map = new HashMap<String, Object>();
+		
+		map.put("city", city);
+		map.put("sitenameid", "2010001");
+		map.put("sitenumberid", "2010002");
+		map.put("hour", "hour");
+		map.put("objtypeid", 2);
+		
+		List<AirCollect> allList = airAppDao.getAirSbyCity(map);
+		if (allList.size() > 0) {
+			//后期调算法再赋值，目前写死
+			allList.get(0).setQuality("优");
+			allList.get(0).setPollutant("PM10");
+			
+			list.add(allList.get(0));
+		} else {
+			AirCollect ac = new AirCollect();
+			ac.setCity(city);
+			list.add(ac);
+		}
+		
+		return list;
+	}
+
+	
+	public List<Map<String, Object>> getSiteSbyCity(HttpServletRequest request) {
+		
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "" : request.getParameter("city");
+		
+		Map<String, Object> map = new HashMap<String, Object>();
+		map.put("objtypeid", 1);
+		map.put("city", city);
+		
+		List<Map<String,Object>> list = baseService.selectForCpAttachInfoStoreTwo(map, "AirAppPublic");
+		return list;
+	}
+
+	
+	public List<AirCollect> getAirSbyObjid(HttpServletRequest request) {
+		//id必传
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		String timetype = (request.getParameter("timetype") == null || "".equals(request.getParameter("timetype"))) ? "小时值" : request.getParameter("timetype");
+		
+		List<AirCollect> list = new ArrayList<AirCollect>();
+		Map<String, Object> map = new HashMap<String, Object>();
+		
+		map.put("objid", objid);
+		if ("小时值".equals(timetype)) {
+			map.put("sitenameid", "2010001");
+			map.put("sitenumberid", "2010002");
+			map.put("day", "day");
+			map.put("objtypeid", 2);
+			
+			List<AirCollect> allList = airAppDao.getAirSbyObjid(map);
+			if (allList.size() > 0) {
+				if (allList.get(0).getCollecttime().contains(".") || "-".equals(allList.get(0).getCollecttime())) {
+					allList.get(0).setCollecttime("-");
+					list.add(allList.get(0));
+				} else {
+					map.put("time", allList.get(0).getCollecttime());
+					map.remove("day");
+					map.put("hour", "hour");
+					List<AirCollect> hourList = airAppDao.getAirSbyObjid(map);
+					for (int i = 0, size = hourList.size(); i < size; i++) {
+						//后期调算法再赋值，目前写死
+						hourList.get(i).setQuality("优");
+						hourList.get(i).setPollutant("PM10");
+						
+						list.add(hourList.get(i));
+					}
+				}
+			}
+		} else {
+			map.put("sitenameid", "3010001");
+			map.put("sitenumberid", "3010002");
+			map.put("day", "day");
+			map.put("objtypeid", 3);
+			List<AirCollect> dayList = airAppDao.getAirSbyObjid(map);
+			for (int i = 0, size =dayList.size(); i < size; i++) {
+				if (dayList.get(i).getCollecttime().contains(".") || "-".equals(dayList.get(i).getCollecttime())) {
+					dayList.get(i).setCollecttime("-");
+					list.add(dayList.get(i));
+				} else {
+					if (i < 7) {
+						//后期调算法再赋值，目前写死
+						dayList.get(i).setQuality("优");
+						dayList.get(i).setPollutant("PM10");
+						
+						list.add(dayList.get(i));
+					} else {
+						break;
+					}
+				}
+			}
+		}
+		
+		return list;
+	}
+
+
+	public List<AirCollect> getAirMdensity(HttpServletRequest request) {
+		//如果是详情,id必传
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "" : request.getParameter("city");
+		
+		//获取所有站点坐标
+		List<SpaceInfo> geomList = baseService.getGeomList("space_site", "");
+		Map<Integer, SpaceInfo> geomMap = new HashMap<Integer, SpaceInfo>();
+		
+		if (geomList.size() > 0) {
+			for (SpaceInfo sp : geomList) {
+				geomMap.put(sp.getObjid(), sp);
+			}
+		}
+		
+		//创建list,用于存放数据返回
+		List<AirCollect> list = new ArrayList<AirCollect>();
+		//传参map
+		Map<String, Object> map = new HashMap<String, Object>();
+		
+		map.put("objid", objid);
+		map.put("city", city);
+		map.put("objtypeid", 2);
+		map.put("sitenameid", "2010001");
+		map.put("sitenumberid", "2010002");
+		map.put("hour", "hour");
+		
+		if (!"".equals(objid)) {//单个站点
+			List<AirCollect> siteList = airAppDao.getAirSbyObjid(map);
+			for (int i = 0, size = siteList.size(); i < size; i++) {
+				//赋值坐标
+				if (geomMap.containsKey(siteList.get(i).getObjid())) {
+					siteList.get(i).setGeom(geomMap.get(siteList.get(i).getObjid()).getShape());
+				}
+				
+				if (siteList.get(i).getCollecttime().contains(".") || "-".equals(siteList.get(i).getCollecttime())) {
+					siteList.get(i).setCollecttime("-");
+					list.add(siteList.get(i));
+				} else {
+					if (i < 24) {
+						//后期调算法再赋值，目前写死
+						siteList.get(i).setQuality("优");
+						siteList.get(i).setPollutant("PM10");
+						
+						list.add(siteList.get(i));
+					} else {
+						break;
+					}
+				}
+			}
+		} else {//所有站点最新数据
+			map.put("allSite", "allSite");
+			List<AirCollect> siteList = airAppDao.getAirSbyObjid(map);
+			for (int i = 0, size = siteList.size(); i < size; i++) {
+				//赋值坐标
+				if (geomMap.containsKey(siteList.get(i).getObjid())) {
+					siteList.get(i).setGeom(geomMap.get(siteList.get(i).getObjid()).getShape());
+				}
+				
+				if (siteList.get(i).getCollecttime().contains(".") || "-".equals(siteList.get(i).getCollecttime())) {
+					siteList.get(i).setCollecttime("-");
+					list.add(siteList.get(i));
+				} else {
+					//后期调算法再赋值，目前写死
+					siteList.get(i).setQuality("优");
+					siteList.get(i).setPollutant("PM10");
+					
+					list.add(siteList.get(i));
+				}
+			}
+		}
+		
+		return list;
+	}
+
+
+	public List<Map<String, Object>> getAirMgoodrate(HttpServletRequest request) {
+		//如果是详情,id必传
+		String objid = (request.getParameter("objid") == null || "".equals(request.getParameter("objid"))) ? "" : request.getParameter("objid");
+		String city = (request.getParameter("city") == null || "".equals(request.getParameter("city"))) ? "" : request.getParameter("city");
+		
+		//获取所有站点坐标
+		List<SpaceInfo> geomList = baseService.getGeomList("space_site", "");
+		Map<Integer, SpaceInfo> geomMap = new HashMap<Integer, SpaceInfo>();
+		
+		if (geomList.size() > 0) {
+			for (SpaceInfo sp : geomList) {
+				geomMap.put(sp.getObjid(), sp);
+			}
+		}
+		
+		//创建list,用于存放数据返回
+		List<Map<String, Object>> resultList = new ArrayList<Map<String, Object>>();
+		
+		//传参map
+		Map<String, Object> map = new HashMap<String, Object>();
+		
+		map.put("objid", objid);
+		map.put("city", city);
+		map.put("objtypeid", 3);
+		map.put("sitenameid", "3010001");
+		map.put("sitenumberid", "3010002");
+		map.put("day", "day");
+		
+		
+		//保留一位小数
+		DecimalFormat df = new DecimalFormat("#0.0");
+		df.setRoundingMode(RoundingMode.HALF_UP);
+		
+		List<AirCollect> siteList = airAppDao.getAirSbyObjid(map);
+		
+		//获取站点objid
+		map.clear();
+		map.put("fieldid", "1010003");
+		map.put("objids", objid);
+		map.put("city", city);
+		List<Integer> siteIdList = airAppDao.getSiteObjid(map);
+
+		
+		
+		
+		
+		//此处待优化
+		for (Integer siteid : siteIdList) {//遍历站点objid
+			int good = 0;
+			//临时list
+			List<AirCollect> list = new ArrayList<AirCollect>();
+			Map<String, Object> goodMap = new LinkedHashMap<String, Object>();
+			
+			//赋值坐标
+			if (geomMap.containsKey(siteid)) {
+				goodMap.put("geom", geomMap.get(siteid).getShape());
+			}
+			
+			for (int i = 0, size = siteList.size(); i < size; i++) {
+				if (siteList.get(i).getObjid() == siteid) {
+					if (siteList.get(i).getCollecttime().contains(".") || "-".equals(siteList.get(i).getCollecttime())) {
+						siteList.get(i).setCollecttime("-");
+						goodMap.put("goodrate", "-");
+						list.add(siteList.get(i));
+					} else {
+						if (list.size() <= 30) {
+							//后期调算法再赋值，目前写死
+							siteList.get(i).setQuality("优");
+							siteList.get(i).setPollutant("PM10");
+							
+							if (("优".equals(siteList.get(i).getQuality())) || ("良".equals(siteList.get(i).getQuality()))) {
+								good += 1;
+							}
+							
+							list.add(siteList.get(i));
+						} else {
+							break;
+						}
+					}
+				}
+			}
+			if (list.size() == 0) {
+				goodMap.put("goodrate", "-");
+			} else {
+				goodMap.put("goodrate", df.format(((double)good/list.size())*100));
+			}
+			
+			goodMap.put("dataList", list);
+			resultList.add(goodMap);
+		}
+		
+		return resultList;
+	}
+	
+
+}
